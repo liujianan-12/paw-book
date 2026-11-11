@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>paw-book 原型 · 宠物门店预约</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #333; }
+  header { background: #2d6cdf; color: #fff; padding: 14px 24px; }
+  header h1 { font-size: 18px; }
+  header p { font-size: 12px; opacity: .85; margin-top: 4px; }
+  nav { display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; }
+  nav button { flex: 1; padding: 12px; border: none; background: none; font-size: 15px; cursor: pointer; border-bottom: 3px solid transparent; }
+  nav button.active { color: #2d6cdf; border-bottom-color: #2d6cdf; font-weight: bold; }
+  main { max-width: 860px; margin: 16px auto; padding: 0 16px 60px; }
+  .page { display: none; }
+  .page.active { display: block; }
+  h2 { font-size: 16px; margin: 18px 0 10px; }
+  h3 { font-size: 14px; margin: 14px 0 8px; color: #666; }
+  .card { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .card .title { font-weight: bold; margin-bottom: 6px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .muted { color: #999; font-size: 12px; }
+  .btn { display: inline-block; padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: #2d6cdf; color: #fff; }
+  .btn.danger { background: #e05252; color: #fff; }
+  .btn.ok { background: #2ea664; color: #fff; }
+  .btn.ghost { background: #fff; border: 1px solid #ccc; color: #666; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; color: #fff; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .b-pay   { background: #fff3e0; color: #c46a00; }
+  .b-ok    { background: #e3f5ec; color: #1d7a46; }
+  .b-rev   { background: #ede7f6; color: #5b3fa8; }
+  .b-svc   { background: #e3f0fd; color: #1d5db8; }
+  .b-can   { background: #fdeaea; color: #b83232; }
+  .b-no    { background: #eceff1; color: #546e7a; }
+  .b-ref   { background: #fff8e1; color: #a67c00; }
+  .demo { background: #fffde7; border: 1px dashed #c9bc4f; border-radius: 8px; padding: 12px 14px; margin: 12px 0; font-size: 13px; }
+  .demo b { color: #8d7a00; }
+  .msg { border-radius: 6px; padding: 10px 12px; font-size: 13px; margin: 8px 0; }
+  .msg.err { background: #fdeaea; color: #b83232; }
+  .msg.good { background: #e3f5ec; color: #1d7a46; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+  th, td { border: 1px solid #e5e6eb; padding: 8px; text-align: left; }
+  th { background: #f0f2f5; }
+  .stat { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat .card { flex: 1; min-width: 120px; text-align: center; }
+  .stat .num { font-size: 24px; font-weight: bold; color: #2d6cdf; }
+  input, select, textarea { padding: 7px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; width: 100%; }
+  label { font-size: 13px; display: block; margin: 10px 0 4px; }
+  .screen-label { font-size: 12px; color: #2d6cdf; background: #e8f0fe; display: inline-block; padding: 2px 10px; border-radius: 10px; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐾 paw-book · 宠物门店预约系统（静态原型）</h1>
+  <p>非真实系统：按钮仅用于切换展示页面状态，数据为写死示例。真实系统见后续开发阶段。</p>
+</header>
+
+<nav>
+  <button class="active" onclick="go('user', this)">👤 宠物主人</button>
+  <button onclick="go('front', this)">🧑‍💼 前台</button>
+  <button onclick="go('cs', this)">🎧 客服</button>
+  <button onclick="go('owner', this)">📊 店长</button>
+</nav>
+
+<main>
+
+<!-- ============ 宠物主人 ============ -->
+<div class="page active" id="user">
+  <span class="screen-label">页面 1：选择时段</span>
+  <h2>可预约时段</h2>
+  <p class="muted">示例当前时间：<b>周五 14:30</b>（用于同时演示三种按钮状态；真实系统中状态由当前时间实时计算）</p>
+  <div class="card">
+    <div class="row">
+      <div><b>周六 09:00 – 10:00</b> <span class="muted">洗护 · 99.00 元</span><br><span class="muted">剩 2 位（已被约 1）</span></div>
+      <button class="btn primary" onclick="show('u-book')">预约</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row">
+      <div><b>周六 11:00 – 12:00</b> <span class="muted">洗护 · 99.00 元</span><br><span class="muted">已满（3/3）</span></div>
+      <button class="btn primary" disabled>已满</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row">
+      <div><b>周五 14:00 – 15:00</b> <span class="muted">洗护 · 99.00 元</span><br><span class="muted">已开始（今天），不可预约</span></div>
+      <button class="btn primary" disabled>已开始</button>
+    </div>
+  </div>
+
+  <div id="u-book" style="display:none">
+    <span class="screen-label">页面 2：预约弹窗（选自己的宠物）</span>
+    <div class="card">
+      <label>选择宠物</label>
+      <select><option>豆豆 · 金毛犬</option><option>咪咪 · 布偶猫</option></select>
+      <p class="muted" style="margin-top:8px">同一宠物同一时段仅能有一个有效预约；未付款预约占用名额 5 分钟。</p>
+      <p style="margin-top:12px">
+        <button class="btn primary" onclick="show('u-pay')">提交预约</button>
+        <button class="btn ghost" onclick="hide('u-book')">取消</button>
+      </p>
+    </div>
+  </div>
+
+  <div id="u-pay" style="display:none">
+    <span class="screen-label">页面 3：待支付（倒计时 5 分钟）</span>
+    <div class="card">
+      <div class="title">预约单 #1001 · 周六 09:00 · 豆豆</div>
+      <p>应付：<b>99.00 元</b>　<span class="badge b-pay">待支付</span>　剩余支付时间 <b>04:32</b></p>
+      <p class="muted">超时未支付将自动取消并释放名额</p>
+      <p style="margin-top:10px">
+        <button class="btn primary" onclick="show('u-pay-result')">立即支付</button>
+        <button class="btn danger" onclick="show('u-cancel')">取消预约</button>
+      </p>
+    </div>
+    <div id="u-pay-result" class="msg good" style="display:none">✅ 支付成功，预约已确认！（若此单早已取消，这里将显示：已登记支付异常并自动退款，预约不恢复）</div>
+    <div class="demo">
+      <b>本页需演示的支付结果分支：</b><br>
+      ① 支付成功 → 转为已确认　② 渠道失败/超时 → 红色提示可重试，预约仍为待支付　③ 倒计时归零 → 自动取消并释放名额
+    </div>
+  </div>
+
+  <div id="u-cancel" style="display:none">
+    <span class="screen-label">弹窗：取消预约（两条分支）</span>
+    <div class="card">
+      <p class="msg good">分支 A：距开始 ≥ 2 小时 → "已受理，全额退款"，名额立即释放。</p>
+      <p class="msg err">分支 B：距开始 &lt; 2 小时 → 填写原因，转"取消审核中"，等客服批准/拒绝；期间名额保留、不可核销。</p>
+      <label>取消原因（分支 B 必填）</label>
+      <textarea rows="2" placeholder="例如：宠物临时生病"></textarea>
+      <p style="margin-top:10px"><button class="btn danger" onclick="alert('原型演示：分支A→已受理退款；分支B→进入取消审核中')">提交取消</button></p>
+      <p><button class="btn ghost" onclick="hide('u-cancel')">关闭</button></p>
+    </div>
+  </div>
+
+  <h2>我的预约</h2>
+  <span class="screen-label">页面 4：预约列表（覆盖全部状态）</span>
+  <table>
+    <tr><th>时段 / 宠物</th><th>状态</th><th>说明</th><th>操作</th></tr>
+    <tr><td>周六 09:00 · 豆豆</td><td><span class="badge b-ok">已确认</span></td><td>已付款，可取消</td><td><button class="btn ghost" onclick="show('u-cancel')">取消</button></td></tr>
+    <tr><td>周六 11:00 · 咪咪</td><td><span class="badge b-rev">取消审核中</span></td><td>原因：临时有事 · 等待客服审核，名额保留中</td><td>—</td></tr>
+    <tr><td>周五 09:00 · 豆豆</td><td><span class="badge b-svc">已完成</span></td><td>服务完成 ✔</td><td>—</td></tr>
+    <tr><td>周日 10:00 · 咪咪</td><td><span class="badge b-can">已取消</span> <span class="badge b-ref">退款失败</span></td><td>客服批准取消，渠道退款失败 → 客服跟进重试中；不影响取消结果</td><td><button class="btn ghost">查看退款</button></td></tr>
+    <tr><td>周五 11:00 · 豆豆</td><td><span class="badge b-no">未到店</span></td><td>店长标记：未到店未联系上 · 本题约定不自动退款</td><td>—</td></tr>
+  </table>
+</div>
+
+<!-- ============ 前台 ============ -->
+<div class="page" id="front">
+  <span class="screen-label">页面 1：今日到店核销</span>
+  <h2>今日预约（仅本店）</h2>
+  <table>
+    <tr><th>时段 / 宠物 / 主人</th><th>状态</th><th>核销</th></tr>
+    <tr><td>09:00 · 豆豆 · 张三</td><td><span class="badge b-ok">已确认</span></td><td><button class="btn ok" onclick="alert('原型演示：核销成功 → 状态变为已核销')">核销</button></td></tr>
+    <tr><td>09:00 · 咪咪 · 李四</td><td><span class="badge b-rev">取消审核中</span></td><td><button class="btn ok" disabled title="审核中禁止核销">不可核销</button></td></tr>
+    <tr><td>11:00 · 乐乐 · 王五</td><td><span class="badge b-can">已取消</span></td><td><button class="btn ok" disabled>不可核销</button></td></tr>
+    <tr><td>11:00 · 豆豆 · 张三</td><td><span class="badge b-svc">已核销</span></td><td><button class="btn ok" disabled title="重复核销被拒绝">已核销 ✔</button></td></tr>
+  </table>
+  <div class="demo">
+    <b>核销校验三条件（缺一不可）：</b>本店员工操作 ＋ 预约已确认 ＋ 无待处理取消申请。<br>
+    <b>并发冲突演示：</b>前台点核销的同一瞬间主人在线取消 → 仅一个成功，另一个失败并提示原因。
+  </div>
+  <div class="msg err">❌ 核销失败示例：该预约刚刚被主人取消（或：您不是本店员工，无权操作）——预约与金额记录不受影响。</div>
+  <div class="msg good">✅ 核销成功示例：#1001 豆豆 已核销，进入服务队列。</div>
+</div>
+
+<!-- ============ 客服 ============ -->
+<div class="page" id="cs">
+  <span class="screen-label">页面 1：取消审核</span>
+  <h2>待审核的取消申请（开始前 &lt; 2 小时）</h2>
+  <div class="card">
+    <div class="row">
+      <div><b>#1003 · 咪咪 · 周六 11:00</b><br>主人申请原因：<i>宠物临时生病，医生建议静养</i><br><span class="muted">当前：已确认 → 审核期间名额保留、禁止核销</span></div>
+      <div>
+        <button class="btn ok" onclick="alert('原型演示：批准 → 已取消，释放名额，发起全额退款')">批准</button>
+        <button class="btn danger" onclick="alert('原型演示：拒绝 → 预约恢复为已确认，名额不变')">拒绝</button>
+      </div>
+    </div>
+  </div>
+
+  <span class="screen-label">页面 2：退款跟进</span>
+  <h2>退款失败记录</h2>
+  <table>
+    <tr><th>预约</th><th>失败原因</th><th>退款状态</th><th>预约状态</th><th>操作</th></tr>
+    <tr>
+      <td>#1007 · 乐乐 · 周日 10:00</td>
+      <td>渠道超时</td>
+      <td><span class="badge b-ref">失败（已重试 1 次）</span></td>
+      <td><span class="badge b-can">已取消</span><br><span class="muted">退款失败不影响取消结果，名额不回收</span></td>
+      <td><button class="btn primary" onclick="alert('原型演示：重试退款')">重试退款</button></td>
+    </tr>
+  </table>
+  <div class="demo"><b>要点：</b>取消是取消、退款是退款——退款失败不能让已取消预约重新可用（含支付异常退款同样走此通道跟进）。</div>
+</div>
+
+<!-- ============ 店长 ============ -->
+<div class="page" id="owner">
+  <span class="screen-label">页面 1：发布可预约时段</span>
+  <h2>发布时段</h2>
+  <div class="card">
+    <div class="row">
+      <div style="flex:1"><label>开始时间</label><input type="text" value="2026-11-14 09:00"></div>
+      <div style="flex:1"><label>结束时间</label><input type="text" value="2026-11-14 10:00"></div>
+      <div style="flex:1"><label>容量（固定 3）</label><input type="text" value="3" disabled></div>
+      <div><label>&nbsp;</label><button class="btn primary" onclick="alert('原型演示：发布成功，出现在可预约列表')">发布</button></div>
+    </div>
+  </div>
+
+  <span class="screen-label">页面 2：时段结束后处理</span>
+  <h2>标记未到店</h2>
+  <div class="card">
+    <div class="row">
+      <div><b>#1009 · 豆豆 · 周六 14:00</b>　<span class="badge b-ok">已确认</span>　<span class="muted">时段已结束，未到店</span></div>
+      <button class="btn ghost" onclick="alert('原型演示：须填写原因后标记；本题约定不自动退款，用户可查看该结果')">标记未到店</button>
+    </div>
+  </div>
+
+  <span class="screen-label">页面 3：当日经营核查（日清）</span>
+  <h2>11 月 11 日 · 日清看板</h2>
+  <div class="stat">
+    <div class="card"><div class="num">2</div><div class="muted">有效预约</div></div>
+    <div class="card"><div class="num">1</div><div class="muted">已完成</div></div>
+    <div class="card"><div class="num">2</div><div class="muted">已取消</div></div>
+    <div class="card"><div class="num">1</div><div class="muted">未到店</div></div>
+    <div class="card"><div class="num">1</div><div class="muted">退款待处理</div></div>
+  </div>
+  <h3>金额勾稽（钱必须能对上账）</h3>
+  <div class="card">
+    <b>已收款 ¥396.00</b> ＝ <b>已完成收入 ¥99.00</b> ＋ <b>已退款 ¥198.00</b> ＋ <b>未退款（含失败）¥99.00</b>
+    <br><span class="muted">不允许把所有已付款都计作已完成服务（题面硬性要求）</span>
+  </div>
+  <h3>当日明细</h3>
+  <table>
+    <tr><th>预约</th><th>状态</th><th>收款</th><th>退款</th><th>备注</th></tr>
+    <tr><td>#1001 豆豆 09:00</td><td><span class="badge b-ok">已完成</span></td><td>¥99.00</td><td>—</td><td>计入服务收入</td></tr>
+    <tr><td>#1003 咪咪 11:00</td><td><span class="badge b-can">已取消(批准)</span></td><td>¥99.00</td><td>¥99.00 ✔</td><td>不计收入</td></tr>
+    <tr><td>#1005 乐乐 14:00</td><td><span class="badge b-can">已取消(提前)</span></td><td>¥99.00</td><td>¥99.00 ✔</td><td>不计收入</td></tr>
+    <tr><td>#1007 豆豆 09:00</td><td><span class="badge b-no">未到店</span></td><td>¥99.00</td><td>—</td><td>不自动退款（本题约定）</td></tr>
+    <tr><td>#1008 咪咪 11:00</td><td><span class="badge b-can">已取消</span> <span class="badge b-ref">退款失败</span></td><td>¥99.00</td><td>待退 ¥99.00</td><td>客服跟进中，计入"退款待处理"</td></tr>
+  </table>
+</div>
+
+</main>
+
+<script>
+function go(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+</script>
+</body>
+</html>
