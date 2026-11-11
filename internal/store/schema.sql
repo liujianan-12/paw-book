@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     status          TEXT NOT NULL,
     amount_cents    INTEGER NOT NULL,
     pay_deadline    TEXT NOT NULL,             -- 未付款占位截止时间
+    cancel_type     TEXT,                      -- TIMEOUT / USER / EARLY / APPROVED
     cancel_reason   TEXT,
     no_show_reason  TEXT,
     cancel_review_id INTEGER,
