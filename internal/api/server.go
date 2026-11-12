@@ -37,6 +37,8 @@ type Server struct {
 	Cutoff  time.Duration // 免费取消分界（2h）
 	PayHold time.Duration // 占位时长（5m）
 	Secret  string        // 模拟渠道回调签名密钥
+	// MockPay 打开后提供“模拟渠道确认”按钮接口（仅教学演示，正式回调仍必须验签）。
+	MockPay bool
 
 	mu       sync.RWMutex
 	sessions map[string]Session
@@ -70,6 +72,7 @@ func (s *Server) Handler() http.Handler {
 	// A5 支付回调 + 退款回调
 	mux.HandleFunc("POST /api/payment/notify", s.handlePayNotify)
 	mux.HandleFunc("POST /api/refund/notify", s.handleRefundNotify)
+	mux.HandleFunc("POST /api/mock/pay", s.handleMockPay)
 	// A9–A11
 	mux.HandleFunc("POST /api/reception/reservations/{id}/checkin", s.idem("reservation.checkin", s.handleCheckIn))
 	mux.HandleFunc("POST /api/service/reservations/{id}/start", s.idem("reservation.start", s.handleStart))
@@ -132,16 +135,32 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.sessions[token] = sess
 	s.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: "pb_sid", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
-	writeOK(w, map[string]any{"role": sess.Role, "name": sess.Name})
+	// 同时返回 token：预览环境可能禁用第三方 cookie，前端用 Authorization: Bearer 兜底
+	writeOK(w, map[string]any{"role": sess.Role, "name": sess.Name, "token": token})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie("pb_sid"); err == nil {
+	token := bearerToken(r)
+	if token == "" {
+		if c, err := r.Cookie("pb_sid"); err == nil {
+			token = c.Value
+		}
+	}
+	if token != "" {
 		s.mu.Lock()
-		delete(s.sessions, c.Value)
+		delete(s.sessions, token)
 		s.mu.Unlock()
 	}
 	writeOK(w, map[string]any{})
+}
+
+// bearerToken 读取 Authorization: Bearer <token>（页面在 cookie 受限时的回退通道）。
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if len(h) > 7 && strings.EqualFold(h[:7], "Bearer ") {
+		return strings.TrimSpace(h[7:])
+	}
+	return ""
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -154,13 +173,17 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 // require 从会话取身份并按角色授权（未登录 401，角色不符 403）。
 func (s *Server) require(w http.ResponseWriter, r *http.Request, roles ...string) (Session, bool) {
-	c, err := r.Cookie("pb_sid")
-	if err != nil {
-		writeErr(w, domain.Errf(domain.CodeUnauthenticated, "未登录"))
-		return Session{}, false
+	token := bearerToken(r)
+	if token == "" {
+		c, err := r.Cookie("pb_sid")
+		if err != nil {
+			writeErr(w, domain.Errf(domain.CodeUnauthenticated, "未登录"))
+			return Session{}, false
+		}
+		token = c.Value
 	}
 	s.mu.RLock()
-	sess, ok := s.sessions[c.Value]
+	sess, ok := s.sessions[token]
 	s.mu.RUnlock()
 	if !ok {
 		writeErr(w, domain.Errf(domain.CodeUnauthenticated, "会话已失效"))

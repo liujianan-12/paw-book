@@ -24,8 +24,17 @@ func (s *Server) pages() http.Handler {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = w.Write(data)
 			return
-		case "/guard.js":
-			data, err := webFS.ReadFile("web/guard.js")
+		case "/app.css":
+			data, err := webFS.ReadFile("web/app.css")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			_, _ = w.Write(data)
+			return
+		case "/app.js":
+			data, err := webFS.ReadFile("web/app.js")
 			if err != nil {
 				http.NotFound(w, r)
 				return

@@ -37,6 +37,7 @@ func main() {
 	}
 
 	srv := api.New(db, nowFn, cfg.CancelCutoff, cfg.PayHoldTimeout, cfg.PaySecret)
+	srv.MockPay = os.Getenv("PAW_ENABLE_MOCK_PAY") == "1"
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           srv.Handler(),

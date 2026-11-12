@@ -146,6 +146,38 @@ func (s *Server) handlePayNotify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// 模拟渠道确认：仅供页面演示（正式渠道回调必须走 /api/payment/notify + 验签）。
+func (s *Server) handleMockPay(w http.ResponseWriter, r *http.Request) {
+	if !s.MockPay {
+		writeErr(w, domain.Errf(domain.CodeNotFound, "模拟支付未启用"))
+		return
+	}
+	sess, ok := s.require(w, r, "user")
+	if !ok {
+		return
+	}
+	var req struct {
+		OrderNo string `json:"orderNo"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	var resID int64
+	if err := s.DB.QueryRowContext(r.Context(),
+		`SELECT p.reservation_id FROM payment p JOIN reservation r ON r.id=p.reservation_id
+		 WHERE p.order_no=? AND r.user_id=?`, req.OrderNo, sess.UserID).Scan(&resID); err != nil {
+		writeErr(w, domain.Errf(domain.CodePaymentNotFound, "支付单不存在或不属于当前用户"))
+		return
+	}
+	res, err := service.HandlePayNotify(r.Context(), s.DB,
+		"MOCK-"+req.OrderNo+"-"+repo.FmtTime(s.Now()), req.OrderNo, true, s.Now())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeOK(w, map[string]any{"result": res.Result, "reservationId": res.ReservationID})
+}
+
 // 退款回调（R4.3/R4.4）。
 func (s *Server) handleRefundNotify(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))

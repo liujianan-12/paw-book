@@ -94,7 +94,8 @@ func SeedSlots(ctx context.Context, db *sql.DB, now time.Time) (int, error) {
 	if n > 0 {
 		return 0, nil
 	}
-	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	// 当日 09/11/14 点三个未来时段（教学时钟 06:00 启动时均在未来）
+	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	hours := []int{9, 11, 14}
 	for _, h := range hours {
 		start := base.Add(time.Duration(h) * time.Hour)

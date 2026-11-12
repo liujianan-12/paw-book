@@ -134,7 +134,7 @@ func TestAuthPagesAndHealth(t *testing.T) {
 	s, _ := newTestServer(t)
 	c := newClient(t, s)
 
-	for _, path := range []string{"/login.html", "/user.html", "/reception.html", "/service.html", "/cs.html", "/manager.html", "/guard.js"} {
+	for _, path := range []string{"/login.html", "/user.html", "/reception.html", "/service.html", "/cs.html", "/manager.html", "/app.css", "/app.js"} {
 		rec := c.doAs("", "GET", path, nil)
 		if rec.Code != 200 || rec.Header().Get("Content-Type") == "" {
 			t.Fatalf("页面 %s 应可访问: %d", path, rec.Code)
@@ -584,6 +584,71 @@ func TestHandlerErrorBranches(t *testing.T) {
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("退款单不存在应 404: %d", rec.Code)
+	}
+}
+
+// 预览环境 cookie 受限时的 Bearer 回退，以及页面“模拟渠道确认”按钮接口。
+func TestBearerTokenAndMockPay(t *testing.T) {
+	s, _ := newTestServer(t)
+	c := newClient(t, s)
+	c.login("mgr")
+	c.login("u1")
+
+	// 直接登录拿 token（不写 cookie）
+	rec := c.doAs("", "POST", "/api/auth/login", map[string]any{"account": "u1", "password": "123456"})
+	token, _ := decodeData(t, rec)["token"].(string)
+	if token == "" {
+		t.Fatal("登录应返回 token")
+	}
+	req := httptest.NewRequest("GET", "/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("Bearer 访问 /api/me 应 200: %d", rr.Code)
+	}
+
+	// 模拟支付接口
+	s.MockPay = true
+	slotID := c.createSlot(3, 3)
+	r := int64(decodeData(t, c.doAs("u1", "POST", "/api/reservations", map[string]any{"slotId": slotID, "petId": 1}))["reservationId"].(float64))
+	p := decodeData(t, c.doAs("u1", "POST", fmt.Sprintf("/api/reservations/%d/pay", r), nil))
+	res := decodeData(t, c.doAs("u1", "POST", "/api/mock/pay", map[string]any{"orderNo": p["orderNo"]}))
+	if res["result"] != domain.NotifyConfirmed {
+		t.Fatalf("模拟支付应确认: %v", res)
+	}
+	// 重复确认幂等
+	req = httptest.NewRequest("POST", "/api/mock/pay", bytes.NewReader([]byte(`{"orderNo":"`+p["orderNo"].(string)+`"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("重复确认应幂等: %d %s", rr.Code, rr.Body.String())
+	}
+	if d := decodeData(t, rr); d["result"] != domain.NotifyDuplicate {
+		t.Fatalf("重复确认应返回 DUPLICATE_IGNORED: %v", d)
+	}
+
+	// 未启用时 404
+	s.MockPay = false
+	if rec := c.doAs("u1", "POST", "/api/mock/pay", map[string]any{"orderNo": "x"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("未启用模拟支付应 404: %d", rec.Code)
+	}
+	// Bearer 登出后失效
+	req = httptest.NewRequest("POST", "/api/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("Bearer 登出应 200: %d", rr.Code)
+	}
+	req = httptest.NewRequest("GET", "/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("登出后 Bearer 应 401: %d", rr.Code)
 	}
 }
 

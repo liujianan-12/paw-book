@@ -1,63 +1,125 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>用户预约页</title>
-<style>body{font-family:system-ui;max-width:880px;margin:24px auto;padding:0 16px}
-table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #ddd;padding:6px;font-size:14px}
-button{padding:4px 8px;margin:2px}pre{background:#f5f5f5;padding:8px;white-space:pre-wrap}</style></head>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>宠物主人 · 预约</title>
+<link rel="stylesheet" href="/app.css">
+</head>
 <body>
-<h2>宠物主人：时段与我的预约</h2>
-<p><a href="/login.html">切换账号</a></p>
-<h3>可约时段</h3>
-<table id="slots"><thead><tr><th>ID</th><th>开始</th><th>结束</th><th>剩余</th><th>操作</th></tr></thead><tbody></tbody></table>
-<label>宠物：<select id="pet"><option value="1">豆豆</option><option value="2">咪咪</option></select></label>
-<h3>我的预约</h3>
-<table id="mine"><thead><tr><th>ID</th><th>状态</th><th>金额(分)</th><th>退款</th><th>操作</th></tr></thead><tbody></tbody></table>
-<pre id="out">就绪</pre>
-<script src="/guard.js"></script>
+<header>
+  <h1>我的预约</h1>
+  <span class="who" data-who></span>
+  <button onclick="PB.logout()">退出登录</button>
+</header>
+<main>
+  <section class="card">
+    <h2>可约时段 <span class="hint">每时段容量 3 人，预约后 5 分钟内完成支付</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <label for="pet">宠物</label>
+      <select id="pet"><option value="1">豆豆（金毛）</option><option value="2">咪咪（布偶）</option></select>
+      <button id="refresh">刷新</button>
+    </div>
+    <table>
+      <thead><tr><th>时段</th><th>开始</th><th>结束</th><th>价格</th><th>剩余</th><th>操作</th></tr></thead>
+      <tbody id="slots"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>我的预约</h2>
+    <table>
+      <thead><tr><th>ID</th><th>宠物</th><th>时段</th><th>状态</th><th>金额</th><th>退款</th><th>操作</th></tr></thead>
+      <tbody id="mine"></tbody>
+    </table>
+    <pre class="msg" id="msg">选择时段后点击“预约”。</pre>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
 <script>
-const out = document.getElementById('out');
-async function api(method, path, body) {
-  const r = await fetch(path, {method, headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined});
-  const j = await r.json();
-  if (j.code !== 0) throw new Error(j.code + ': ' + j.message);
-  return j.data;
-}
-function say(s){ out.textContent = s; }
-async function loadSlots(){
-  const t = document.querySelector('#slots tbody'); t.innerHTML='';
+const msg = document.getElementById('msg');
+const say = (s) => { msg.textContent = s; };
+
+function fmt(t) { return t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-'; }
+
+async function loadSlots() {
+  const tb = document.getElementById('slots');
   try {
-    const list = await api('GET','/api/slots');
-    list.forEach(s => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${s.ID}</td><td>${s.StartAt}</td><td>${s.EndAt}</td><td>${s.Remaining}</td>`;
-      const td = document.createElement('td');
-      const b = document.createElement('button'); b.textContent='预约';
-      b.onclick = async () => { try { say(JSON.stringify(await api('POST','/api/reservations',{slotId:s.ID, petId:Number(document.getElementById('pet').value)}))); loadMine(); } catch(e){ say('预约失败：'+e.message); } };
-      td.appendChild(b); tr.appendChild(td); t.appendChild(tr);
-    });
-  } catch(e) { say('加载时段失败：'+e.message); }
+    const list = await PB.api('GET', '/api/slots');
+    if (!list.length) return PB.empty(tb, 6, '暂无未来时段，请等待店长发布');
+    tb.innerHTML = list.map(s => `
+      <tr>
+        <td>#${s.ID}</td><td>${fmt(s.StartAt)}</td><td>${fmt(s.EndAt)}</td>
+        <td>${PB.money(9900)}</td>
+        <td>${s.Remaining > 0 ? '<span class="badge ok">余 ' + s.Remaining + '</span>' : '<span class="badge bad">已满</span>'}</td>
+        <td><button class="primary" data-slot="${s.ID}" ${s.Remaining > 0 ? '' : 'disabled'}>预约</button></td>
+      </tr>`).join('');
+    tb.querySelectorAll('button[data-slot]').forEach(b => b.onclick = () => reserve(Number(b.dataset.slot)));
+  } catch (e) { PB.empty(tb, 6, '加载失败：' + e.message); }
 }
-async function loadMine(){
-  const t = document.querySelector('#mine tbody'); t.innerHTML='';
+
+async function reserve(slotId) {
   try {
-    const list = await api('GET','/api/my/reservations');
-    list.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.ID}</td><td>${r.Status}</td><td>${r.PriceCents}</td><td>${r.RefundStatus||'-'}</td>`;
-      const td = document.createElement('td');
-      if (r.Status === 'PENDING_PAYMENT') {
-        const pay = document.createElement('button'); pay.textContent='去支付';
-        pay.onclick = async () => { try { say('支付单：'+JSON.stringify(await api('POST',`/api/reservations/${r.ID}/pay`))+'\n（演示：需调用模拟渠道 /pay 并回调）'); } catch(e){ say('支付失败：'+e.message); } };
-        td.appendChild(pay);
-      }
-      const cancel = document.createElement('button'); cancel.textContent='取消';
-      cancel.onclick = async () => {
-        try { say(JSON.stringify(await api('POST',`/api/reservations/${r.ID}/cancel`,{reason:'临时有事'}))); loadSlots(); loadMine(); }
-        catch(e){ if (e.message.includes('CANCEL_REASON_REQUIRED')) { say('临近开始取消需填写原因，请用接口提交原因'); } else { say('取消失败：'+e.message); } }
-      };
-      td.appendChild(cancel); tr.appendChild(td); t.appendChild(tr);
-    });
-  } catch(e) { say('加载我的预约失败：'+e.message); }
+    const r = await PB.api('POST', '/api/reservations', {slotId, petId: Number(document.getElementById('pet').value)});
+    say('预约成功 #' + r.reservationId + '，请在 ' + fmt(r.payExpireAt) + ' 前完成支付（' + (r.priceCents/100).toFixed(2) + ' 元）');
+    PB.toast('预约已创建，待支付');
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('预约失败：' + e.message); PB.toast('预约失败：' + e.message, true); }
 }
-requireLogin('user').then(s => { if (s) { loadSlots(); loadMine(); } });
+
+async function pay(id) {
+  try {
+    const p = await PB.api('POST', '/api/reservations/' + id + '/pay');
+    say('支付单 ' + p.orderNo + '（第 ' + p.attempt + ' 次尝试）');
+    try {
+      const n = await PB.api('POST', '/api/mock/pay', {orderNo: p.orderNo});
+      say('模拟渠道支付成功：' + n.result);
+      PB.toast('支付成功');
+    } catch (e) {
+      say('支付单已创建：' + p.orderNo + '\n模拟渠道未启用（PAW_ENABLE_MOCK_PAY=1），请通过渠道回调完成支付。');
+    }
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('支付失败：' + e.message); PB.toast('支付失败：' + e.message, true); }
+}
+
+async function cancel(id) {
+  const reason = prompt('取消原因（距开始不足 2 小时时必填）', '临时有事');
+  if (reason === null) return;
+  try {
+    const r = await PB.api('POST', '/api/reservations/' + id + '/cancel', {reason});
+    if (r.status === 'AUTO_ACCEPTED') {
+      say('已自动受理，退款单 #' + r.refundId + ' 处理中');
+    } else if (r.status === 'CANCELLED') {
+      say('未付款预约已取消，名额已释放');
+    } else {
+      say('已提交客服审核（申请 #' + r.cancelRequestId + '），名额保留');
+    }
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('取消失败：' + e.message); PB.toast('取消失败：' + e.message, true); }
+}
+
+async function loadMine() {
+  const tb = document.getElementById('mine');
+  try {
+    const list = await PB.api('GET', '/api/my/reservations');
+    if (!list.length) return PB.empty(tb, 7, '还没有预约');
+    tb.innerHTML = list.map(r => `
+      <tr>
+        <td>#${r.ID}</td><td>${PB.esc(r.PetName)}</td><td>${fmt(r.SlotStart)}</td>
+        <td>${PB.badge(r.Status)}</td><td>${PB.money(r.PriceCents)}</td>
+        <td>${r.RefundStatus ? PB.badge(r.RefundStatus) : '<span class="muted">-</span>'}</td>
+        <td>
+          ${r.Status === 'PENDING_PAYMENT' ? '<button class="primary" data-pay="' + r.ID + '">去支付</button>' : ''}
+          ${['PENDING_PAYMENT','CONFIRMED'].includes(r.Status) ? '<button class="danger" data-cancel="' + r.ID + '">取消</button>' : ''}
+        </td>
+      </tr>`).join('');
+    tb.querySelectorAll('button[data-pay]').forEach(b => b.onclick = () => pay(Number(b.dataset.pay)));
+    tb.querySelectorAll('button[data-cancel]').forEach(b => b.onclick = () => cancel(Number(b.dataset.cancel)));
+  } catch (e) { PB.empty(tb, 7, '加载失败：' + e.message); }
+}
+
+document.getElementById('refresh').onclick = () => { loadSlots(); loadMine(); };
+PB.requireLogin('user').then(s => { if (s) { loadSlots(); loadMine(); } });
 </script>
-</body></html>
+</body>
+</html>
