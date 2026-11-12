@@ -38,7 +38,7 @@ func seed(t *testing.T, db *sql.DB) {
 		`INSERT INTO services(id, store_id, name, price_cents, active) VALUES(1, 1, '洗护', 9900, 1)`,
 		`INSERT INTO users(id, name) VALUES(1, '张三'), (2, '李四'), (3, '王五')`,
 		`INSERT INTO pets(id, user_id, name, breed) VALUES(1, 1, '豆豆', '金毛'), (2, 1, '咪咪', '布偶'), (3, 2, '乐乐', '柯基')`,
-		`INSERT INTO employees(id, store_id, name, role) VALUES(1, 1, '店长甲', 'manager')`,
+		`INSERT INTO employees(id, store_id, name, role) VALUES(1, 1, '店长甲', 'manager'), (2, 1, '前台乙', 'front'), (3, 1, '服务员丙', 'staff'), (4, 1, '客服丁', 'customerservice')`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
