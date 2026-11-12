@@ -1,0 +1,19 @@
+﻿acceptance run 2026-11-12T16:02:59.0524615+08:00 sha=9680d2c32f1473635d0d442b58088caf88ef6f20
+git status --porcelain (before):
+ M .agent/08-agent-workflow.md
+ M .agent/11-acceptance-checklist.md
+ M .agent/12-plan-8h.md
+ M .agent/development/README.md
+ M AGENTS.md
+ M README.md
+ M docs/assumptions.md
+ M skills/acceptance-audit/SKILL.md
+ M skills/slot-rule-guard/SKILL.md
+?? .agent/13-acceptance-runbook.md
+?? docs/evidence/acceptance/
+gofmt exit=0
+go vet exit=0
+go test exit=0
+coverage run exit=1
+per-package exit=0
+race exit=2

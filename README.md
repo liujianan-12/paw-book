@@ -19,6 +19,7 @@ AGENTS.md                       # 入口 + 硬性约束（题目要求学生自�
   10-evidence-ai-record.md      # 会话导出、events.jsonl、脱敏、视频时间点目录、交付清单
   11-acceptance-checklist.md    # 逐项验收表（E/R/S/P/Q/G/AI 全编号）
   12-plan-8h.md                 # 8 小时时间盒、任务编号 T02-Txx、风险
+  13-acceptance-runbook.md      # 验收子代理执行手册（10 分钟命令清单/分诊/卡住处理/BLOCKED 口径）
   development/README.md         # 任务记录索引与五阶段看板
   templates/                    # 需求、任务记录、缺陷、验收报告、skill-usage 模板
 docs/

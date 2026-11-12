@@ -1,8 +1,8 @@
-﻿---
+---
 name: slot-rule-guard
 description: 业务专项 Skill。检查宠物门店预约的名额账、状态机、取消政策、退款独立性与金额对账是否一致；发现违规时输出可复现证据并交回开发修复。
 version: 0.1.0
-owner: 学生（提交前填写姓名）
+owner: <学生姓名>
 ---
 
 # slot-rule-guard（业务专项检查）
@@ -36,19 +36,96 @@ export AUDIT_DATE='2026-11-12'; export STORE_ID=1
 git rev-parse HEAD   # 记录审计版本
 ```
 
-### 步骤 2：执行检查集（SQLite 版）
+### 步骤 2：执行检查 SQL（保存为 `skills/slot-rule-guard/checks.sql`）
 
-```bash
-# 只读打开 SQLite（本项目 D1/D8），检查集见 skills/slot-rule-guard/checks.sql
-go run ./cmd/audit -db <paw-book.db> -date 2026-11-14 -store 1 \
-  -commit <sha> -out docs/evidence/skill/slot-guard-<date>-<sha>.json
+```sql
+-- I1/I2 名额账：reserved_count 与占名额预约数应相等，且不超容量
+SELECT s.id, s.capacity, s.reserved_count,
+       COUNT(r.id) AS holding
+FROM slot s
+LEFT JOIN reservation r ON r.slot_id = s.id
+ AND r.status IN ('PENDING_PAYMENT','CONFIRMED','CANCELLATION_REVIEW','CHECKED_IN','IN_SERVICE','COMPLETED')
+WHERE s.store_id = :store AND DATE(s.start_at) = :date
+GROUP BY s.id, s.capacity, s.reserved_count
+HAVING holding <> s.reserved_count OR s.reserved_count > s.capacity;
+
+-- I3 同一宠物同一时段重复有效
+SELECT slot_id, pet_id, COUNT(*) AS n
+FROM reservation
+WHERE status IN ('PENDING_PAYMENT','CONFIRMED','CANCELLATION_REVIEW','CHECKED_IN','IN_SERVICE','COMPLETED')
+GROUP BY slot_id, pet_id HAVING n > 1;
+
+-- 状态与时间戳不合法（示例：已确认未付款、已到店无核销时间、已完成未开始、未到店无原因）
+SELECT id, status FROM reservation
+WHERE (status='CONFIRMED'   AND paid_at IS NULL)
+   OR (status='CHECKED_IN'  AND checked_in_at IS NULL)
+   OR (status='IN_SERVICE'  AND started_at IS NULL)
+   OR (status='COMPLETED'   AND (started_at IS NULL OR completed_at IS NULL))
+   OR (status='NO_SHOW'     AND (no_show_at IS NULL OR no_show_reason IS NULL OR no_show_reason=''));
+
+-- R3 取消政策：自动受理必须距开始 >=2h；<2h 必须有取消申请且经客服批准
+SELECT r.id, r.cancel_type, r.cancelled_at, s.start_at,
+       TIMESTAMPDIFF(MINUTE, r.cancelled_at, s.start_at) AS minutes_before_start
+FROM reservation r JOIN slot s ON s.id=r.slot_id
+WHERE r.status='CANCELLED' AND r.cancel_type='AUTO_BEFORE_2H'
+  AND TIMESTAMPDIFF(MINUTE, r.cancelled_at, s.start_at) < 120;
+
+SELECT r.id FROM reservation r
+JOIN cancel_request c ON c.reservation_id=r.id
+JOIN slot s ON s.id=r.slot_id
+WHERE r.status='CANCELLED' AND r.cancel_type='CS_APPROVED'
+  AND TIMESTAMPDIFF(MINUTE, r.cancelled_at, s.start_at) >= 120;
+
+-- R3.3/R5.1 待审取消期间被核销（或状态不一致）
+SELECT r.id, r.status, c.status AS cancel_status
+FROM reservation r JOIN cancel_request c ON c.reservation_id=r.id
+WHERE c.status='PENDING' AND r.status IN ('CHECKED_IN','IN_SERVICE','COMPLETED');
+
+-- R4.2/R4.4 取消后名额释放与退款一致性
+SELECT r.id, r.status, r.seat_released, rf.id AS refund_id, rf.status AS refund_status
+FROM reservation r LEFT JOIN refund rf ON rf.reservation_id=r.id
+WHERE r.status IN ('CANCELLED') AND (r.seat_released=0 OR rf.id IS NULL);
+
+-- R2.6 关闭后支付：异常记录必须存在且预约不得恢复为有效状态
+SELECT r.id, r.status, pa.id AS anomaly_id, rf.status AS refund_status
+FROM reservation r
+LEFT JOIN payment_anomaly pa ON pa.reservation_id=r.id
+LEFT JOIN refund rf ON rf.reservation_id=r.id
+WHERE r.status IN ('EXPIRED','CANCELLED') AND pa.id IS NULL;   -- 需人工结合支付通知确认
+
+-- R2.6 反向：异常支付对应的预约被恢复（违规）
+SELECT r.id, r.status FROM reservation r
+JOIN payment_anomaly pa ON pa.reservation_id=r.id
+WHERE r.status IN ('CONFIRMED','CHECKED_IN','IN_SERVICE','COMPLETED','PENDING_PAYMENT');
+
+-- I8 重复核销 / 重复服务 / 重复退款（若未建唯一键则会暴露）
+SELECT reservation_id, COUNT(*) n FROM checkin_record GROUP BY reservation_id HAVING n>1;
+SELECT reservation_id, COUNT(*) n FROM service_record GROUP BY reservation_id HAVING n>1;
+SELECT reservation_id, COUNT(*) n FROM refund GROUP BY reservation_id HAVING n>1;
+
+-- I13 同一预约多条支付成功（应最多一条；允许失败重试产生多条其他流水）
+SELECT reservation_id, COUNT(*) n FROM payment WHERE status='SUCCESS' GROUP BY reservation_id HAVING n>1;
+
+-- I14 同一预约多条待审核取消申请（同一时刻应最多一条；历史申请可多条）
+SELECT reservation_id, COUNT(*) n FROM cancel_request WHERE status='PENDING' GROUP BY reservation_id HAVING n>1;
+
+-- I4/I6/I7 金额四口径
+SELECT
+  (SELECT COALESCE(SUM(p.amount_cents),0) FROM payment p JOIN reservation r ON r.id=p.reservation_id
+    JOIN slot s ON s.id=r.slot_id
+    WHERE s.store_id=:store AND DATE(s.start_at)=:date AND p.status='SUCCESS') AS paid,
+  (SELECT COALESCE(SUM(rf.amount_cents),0) FROM refund rf JOIN reservation r ON r.id=rf.reservation_id
+    JOIN slot s ON s.id=r.slot_id
+    WHERE s.store_id=:store AND DATE(s.start_at)=:date AND rf.status='SUCCESS') AS refunded,
+  (SELECT COALESCE(SUM(r.price_cents),0) FROM reservation r JOIN slot s ON s.id=r.slot_id
+    WHERE s.store_id=:store AND DATE(s.start_at)=:date AND r.status='COMPLETED') AS completed_service,
+  (SELECT COUNT(*) FROM refund rf JOIN reservation r ON r.id=rf.reservation_id JOIN slot s ON s.id=r.slot_id
+    WHERE s.store_id=:store AND DATE(s.start_at)=:date AND rf.status IN ('PENDING','PROCESSING','FAILED')) AS pending_refund_cnt;
 ```
-
-检查覆盖：I1 名额账、I3 同宠物唯一、I9 状态/时间戳、R3.1 2 小时分界、R3.2 批准来源、R3.3 待审核销、I5/I8 取消释放与退款、I10 关闭后支付、I8 重复记录、I13 多成功支付、I14 多待审申请、I6/I7 金额勾稽。每条语句返回 0 行为通过，具体 SQL 以 `checks.sql` 为准，不在 Skill 中重复维护。
 
 ### 步骤 3：与日清接口交叉核对（有接口时必做）
 
-调用 `GET /api/manager/daily-close?date=<date>`，将 `CollectedCents/RefundedCents/CompletedIncomeCents/RefundPendingCents` 与步骤 2 结果逐项比较；差异 >0 即违规（`MONEY_MISMATCH`）。记录接口原始响应路径。
+调用 `GET /api/manager/daily-close?date=<date>`，将 `totals.paidCents/refundedCents/completedCents/pendingRefundCents` 与步骤 2 结果逐项比较；差异 >0 即违规（`MONEY_MISMATCH`）。记录接口原始响应路径。
 
 ### 步骤 4：输出（固定 JSON，`docs/evidence/skill/slot-guard-<date>-<sha>.json`）
 

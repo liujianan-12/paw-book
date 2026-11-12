@@ -71,3 +71,13 @@
 ```
 
 > 验收会话模板同理，把角色改为“验收 Agent”、允许写入改为仅验收报告、并强调“逐项对照 `.agent/11`，缺证据即 FAIL”。
+
+## 7. 验收子代理的执行方式（必读）
+
+派发验收子代理时，必须同时给它 [13 验收执行手册](13-acceptance-runbook.md) 与固定提交 SHA，并在任务里写明：
+
+- 时间盒 **10 分钟**，只做门禁（gofmt/vet/test/覆盖率/`-race` 尝试一次）+ 只读规则核对；
+- **不启动服务、不建库、不跑 HTTP 实测**（运行时冒烟在开发阶段 E2E 完成，验收只核对输出）；
+- 只允许新建 `docs/acceptance/acceptance-report-<sha>.md` 与 `docs/evidence/acceptance/<sha>/`；
+- 超时/卡住按手册 §3 处理：先落报告骨架，BLOCKED 不得写成 PASS；
+- 完成后回复只给：PASS/FAIL/BLOCKED 统计、最关键 3 个问题、报告路径、未验证范围。

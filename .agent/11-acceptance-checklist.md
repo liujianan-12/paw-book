@@ -1,5 +1,7 @@
 # 11 验收清单（逐项对照题面，验收 Agent 只认证据）
 
+> 执行方式与时限见 [13 验收执行手册](13-acceptance-runbook.md)：默认 10 分钟、不启动服务/不建库、`-race` 不可用记 BLOCKED、缺证据一律 FAIL。
+
 用法：Acceptance Agent 按本表逐项填写 `docs/acceptance/acceptance-report-<sha>.md`；结论只能是 **PASS / FAIL / BLOCKED**，FAIL/BLOCKED 必须写缺什么；缺证据一律 FAIL，不得凭开发声明通过。学生最后按本表复查一遍。
 
 ## 1. 环境与交付基础

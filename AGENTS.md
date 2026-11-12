@@ -1,6 +1,6 @@
 # AGENTS.md — 题目02·宠物门店预约经营 · AI 协作与交付约束
 
-> 版本：v0.1.2 ｜ 生效日期：2026-11-12 ｜ 维护人（学生）：`<姓名>`
+> 版本：v0.1.3 ｜ 生效日期：2026-11-12 ｜ 维护人（学生）：`<姓名>`
 > 本文件必须在业务开发开始前创建并提交到 `dev/02-*` 分支；之后的每次修改都保留 Git 历史，并在文末「版本与生效记录」写明原因。
 > **优先级**：用户当前明确指令 > 题目原文 > 本文件 > `.agent/` 其他规则 > 工具默认习惯。题目未明确的事项写入 `docs/assumptions.md`，不得把猜测当既定需求。
 
@@ -38,6 +38,7 @@
 | 会话导出、事件清单、视频、脱敏 | [10 过程证据与 AI 记录](.agent/10-evidence-ai-record.md) |
 | 验收、逐项对照题面 | [11 验收清单](.agent/11-acceptance-checklist.md) |
 | 排期、任务编号、每天节奏 | [12 8 小时计划与任务编号](.agent/12-plan-8h.md) |
+| 派发/执行验收子代理；限时验收、卡住处理 | [13 验收执行手册](.agent/13-acceptance-runbook.md) |
 
 模板：[需求说明](.agent/templates/requirement.md)、[任务记录](.agent/templates/task-record.md)、[缺陷记录](.agent/templates/defect-record.md)、[验收报告](.agent/templates/acceptance-report.md)、[skill-usage](.agent/templates/skill-usage.md)。
 
@@ -106,6 +107,7 @@ cmd/ internal/ migrations/ deploy/   # 业务代码与部署（按 02/03 约定�
 | v0.1.0 | 2026-11-12 | 初版：范围、三会话、门禁、目录、证据要求 | 开工前建立约束 | `<sha>` |
 | v0.1.1 | 2026-11-12 | 记录 5 项拍板：SQLite、数据层优先重构、允许取消重提、meegle 按 C/B/A、race 需 MinGW | 消除规则空白与实现冲突 | `<sha>` |
 | v0.1.2 | 2026-11-12 | 补 D5–D8（拆分时机、重复核销幂等、未到店释放名额、SQLite 集成口径）；06 集成测试改 SQLite；03 补幂等写接口清单；11 增 A11/A12/Q8 | 关闭开发 Agent 提出的规则空白 | `<sha>` |
+| v0.1.3 | 2026-11-12 | 新增 13 验收执行手册（10 分钟时间盒、双段验收、禁启动服务、卡住/BLOCKED 口径）；08/11/12 引用 | 验收子代理过慢、易在 HTTP 实测上卡住 | `<sha>` |
 
 ## 6. 快速开始
 
