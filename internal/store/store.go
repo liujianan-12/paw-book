@@ -16,7 +16,7 @@ var schemaSQL string
 // Open 打开（必要时创建）SQLite 数据库并执行建表脚本。
 // 脚本可重复执行（全部使用 IF NOT EXISTS），服务每次启动都会执行以保证结构最新。
 func Open(path string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库 %s: %w", path, err)
