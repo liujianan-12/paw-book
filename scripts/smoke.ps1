@@ -2,7 +2,7 @@
 # 仅使用模拟支付渠道回调；不依赖 Docker/MySQL。用法：pwsh -File scripts/smoke.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$port = 18080
+$port = Get-Random -Minimum 18100 -Maximum 18199
 $base = "http://127.0.0.1:$port"
 $db = Join-Path $env:TEMP ("paw-smoke-" + [guid]::NewGuid().ToString("N") + ".db")
 $env:PAW_ADDR = "127.0.0.1:$port"
@@ -59,7 +59,7 @@ try {
   $res = Api $user POST '/api/reservations' @{slotId=$slot.slotId;petId=1}
   $pay = Api $user POST "/api/reservations/$($res.reservationId)/pay" $null
 
-  $notify = @{channelTxnId='smoke-txn-1';orderNo=$pay.orderNo;success=$true} | ConvertTo-Json -Compress
+  $notify = @{channelTxnId=('smoke-txn-' + [guid]::NewGuid().ToString('N'));orderNo=$pay.orderNo;success=$true} | ConvertTo-Json -Compress
   $sig = Sign $notify
   $n = Api $null POST '/api/payment/notify' $notify @{'X-Mock-Signature'=$sig}
   if ($n.result -ne 'CONFIRMED') { throw "支付回调结果异常：$($n.result)" }

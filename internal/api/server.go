@@ -176,22 +176,28 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// require 从会话取身份并按角色授权（未登录 401，角色不符 403）。
-func (s *Server) require(w http.ResponseWriter, r *http.Request, roles ...string) (Session, bool) {
+// sessionOf 只解析会话，不写响应（供 require 与幂等作用域复用）。
+func (s *Server) sessionOf(r *http.Request) (Session, bool) {
 	token := bearerToken(r)
 	if token == "" {
-		c, err := r.Cookie("pb_sid")
-		if err != nil {
-			writeErr(w, domain.Errf(domain.CodeUnauthenticated, "未登录"))
-			return Session{}, false
+		if c, err := r.Cookie("pb_sid"); err == nil {
+			token = c.Value
 		}
-		token = c.Value
+	}
+	if token == "" {
+		return Session{}, false
 	}
 	s.mu.RLock()
 	sess, ok := s.sessions[token]
 	s.mu.RUnlock()
+	return sess, ok
+}
+
+// require 从会话取身份并按角色授权（未登录 401，角色不符 403）。
+func (s *Server) require(w http.ResponseWriter, r *http.Request, roles ...string) (Session, bool) {
+	sess, ok := s.sessionOf(r)
 	if !ok {
-		writeErr(w, domain.Errf(domain.CodeUnauthenticated, "会话已失效"))
+		writeErr(w, domain.Errf(domain.CodeUnauthenticated, "未登录"))
 		return Session{}, false
 	}
 	if len(roles) > 0 {
@@ -219,6 +225,19 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 			h(w, r)
 			return
 		}
+		// 幂等作用域必须带操作者维度，防止不同用户复用同一 key 读到他人响应（D-T02-01）
+		sess, ok := s.sessionOf(r)
+		if !ok {
+			h(w, r) // 未登录交给 handler 返回 401
+			return
+		}
+		scopeKey := scope
+		if sess.StaffID != 0 {
+			scopeKey += ":staff:" + strconv.FormatInt(sess.StaffID, 10)
+		} else {
+			scopeKey += ":user:" + strconv.FormatInt(sess.UserID, 10)
+		}
+
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		sum := sha256.Sum256(body)
@@ -227,7 +246,7 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 		var code int
 		var storedHash, stored string
 		err := s.DB.QueryRow(`SELECT request_hash, response_code, response_body FROM idempotency_key WHERE scope=? AND key_value=?`,
-			scope, key).Scan(&storedHash, &code, &stored)
+			scopeKey, key).Scan(&storedHash, &code, &stored)
 		if err == nil {
 			if storedHash != hash {
 				writeErr(w, domain.Errf(domain.CodeIdemConflict, "同一 Idempotency-Key 的请求载荷不一致"))
@@ -247,7 +266,7 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 		h(rec, r)
 		if rec.status >= 200 && rec.status < 300 {
 			if _, err := s.DB.Exec(`INSERT INTO idempotency_key(scope, key_value, request_hash, response_code, response_body, created_at)
-				VALUES(?,?,?,?,?,?)`, scope, key, hash, rec.status, rec.body.String(), repo.FmtTime(s.Now())); err != nil {
+				VALUES(?,?,?,?,?,?)`, scopeKey, key, hash, rec.status, rec.body.String(), repo.FmtTime(s.Now())); err != nil {
 				writeErr(w, err)
 				return
 			}
