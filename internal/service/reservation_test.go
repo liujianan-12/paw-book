@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 // —— R1.2/R2.1 创建预约正常流程 ————————————————
@@ -18,7 +18,7 @@ func TestCreateReservationOK(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
-	if r.Status != model.ResPendingPayment {
+	if r.Status != domain.ResPendingPayment {
 		t.Fatalf("初始状态应为待支付，得到 %s", r.Status)
 	}
 	if r.PriceCents != 9900 {
@@ -44,11 +44,11 @@ func TestCreateReservationNotPetOwner(t *testing.T) {
 
 	_, err := CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: slotID, UserID: 1, PetID: 3}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodePetNotOwned)
+	wantBizCode(t, err, domain.CodePetNotOwned)
 
 	_, err = CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: slotID, UserID: 1, PetID: 99}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodePetNotFound)
+	wantBizCode(t, err, domain.CodePetNotFound)
 }
 
 // —— R1.2 同宠物同时段唯一 ———————————————————————
@@ -60,7 +60,7 @@ func TestCreateReservationPetConflict(t *testing.T) {
 	mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: slotID, UserID: 1, PetID: 1}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodeDuplicateActive)
+	wantBizCode(t, err, domain.CodeDuplicateActive)
 
 	// 同一用户的另一只宠物可以约
 	mustCreateReservation(t, db, slotID, 1, 2, testBase)
@@ -83,7 +83,7 @@ func TestCreateReservationSlotFull(t *testing.T) {
 	mustCreateReservation(t, db, slotID, 2, 3, testBase)
 
 	_, err := CreateReservation(ctx, db, CreateReservationParams{SlotID: slotID, UserID: 3, PetID: 4}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodeSlotFull)
+	wantBizCode(t, err, domain.CodeSlotFull)
 	if got := reservedCount(t, db, slotID); got != 3 {
 		t.Fatalf("名额账应保持 3，得到 %d", got)
 	}
@@ -103,12 +103,12 @@ func TestCreateReservationSlotStarted(t *testing.T) {
 	}
 	_, err = CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: 7, UserID: 1, PetID: 1}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodeSlotStarted)
+	wantBizCode(t, err, domain.CodeSlotStarted)
 
 	// 时段不存在
 	_, err = CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: 999, UserID: 1, PetID: 1}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodeSlotNotFound)
+	wantBizCode(t, err, domain.CodeSlotNotFound)
 }
 
 // —— R2.2 过期占位懒清理并释放名额 ————————————————
@@ -123,7 +123,7 @@ func TestCreateReservationExpiredPendingReleasesSlot(t *testing.T) {
 	if r2.ID == r1.ID {
 		t.Fatal("应生成新预约")
 	}
-	if status, ct := reservationStatus(t, db, r1.ID); status != model.ResExpired || ct != model.CancelExpired {
+	if status, ct := reservationStatus(t, db, r1.ID); status != domain.ResExpired || ct != domain.CancelExpired {
 		t.Fatalf("旧预约应已超时取消，得到 %s/%s", status, ct)
 	}
 	if got := reservedCount(t, db, slotID); got != 1 {
@@ -182,12 +182,12 @@ func TestCancelPendingReservation(t *testing.T) {
 	if err := CancelUnpaid(ctx, db, r.ID, 2, testBase); err == nil {
 		t.Fatal("非本人取消应失败")
 	} else {
-		wantBizCode(t, err, CodeNotFound)
+		wantBizCode(t, err, domain.CodeNotFound)
 	}
 	if err := CancelUnpaid(ctx, db, r.ID, 1, testBase.Add(time.Minute)); err != nil {
 		t.Fatalf("本人取消待支付应成功: %v", err)
 	}
-	if status, ct := reservationStatus(t, db, r.ID); status != model.ResCancelled || ct != model.CancelUserUnpaid {
+	if status, ct := reservationStatus(t, db, r.ID); status != domain.ResCancelled || ct != domain.CancelUserUnpaid {
 		t.Fatalf("取消后应为 CANCELLED/USER_UNPAID，得到 %s/%s", status, ct)
 	}
 	if n := reservedCount(t, db, slotID); n != 0 {
@@ -201,9 +201,9 @@ func TestCancelPendingReservation(t *testing.T) {
 	// 名额已释放：其他宠物可约
 	mustCreateReservation(t, db, slotID, 2, 3, testBase.Add(2*time.Minute))
 	// 重复取消：状态不符
-	wantBizCode(t, CancelUnpaid(ctx, db, r.ID, 1, testBase.Add(3*time.Minute)), CodeStateInvalid)
+	wantBizCode(t, CancelUnpaid(ctx, db, r.ID, 1, testBase.Add(3*time.Minute)), domain.CodeStateInvalid)
 	// 不存在的预约
-	wantBizCode(t, CancelUnpaid(ctx, db, 999, 1, testBase), CodeNotFound)
+	wantBizCode(t, CancelUnpaid(ctx, db, 999, 1, testBase), domain.CodeNotFound)
 }
 
 // —— R2.2 占位截止边界：恰在截止时刻视为过期 ————————————
@@ -217,7 +217,7 @@ func TestPayDeadlineBoundary(t *testing.T) {
 	_, err := CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: slotID, UserID: 1, PetID: 1},
 		testBase.Add(5*time.Minute-time.Second), 5*time.Minute)
-	wantBizCode(t, err, CodeDuplicateActive)
+	wantBizCode(t, err, domain.CodeDuplicateActive)
 
 	// 06:05:00 恰到期：旧单被清理，同宠物可再约
 	r2, err := CreateReservation(context.Background(), db,
@@ -228,7 +228,7 @@ func TestPayDeadlineBoundary(t *testing.T) {
 	if r2.ID == r1.ID {
 		t.Fatal("应生成新预约")
 	}
-	if status, _ := reservationStatus(t, db, r1.ID); status != model.ResExpired {
+	if status, _ := reservationStatus(t, db, r1.ID); status != domain.ResExpired {
 		t.Fatalf("到期预约应被清理为过期，得到 %s", status)
 	}
 }
@@ -249,7 +249,7 @@ func TestGetReservationAndList(t *testing.T) {
 		t.Fatalf("详情联表字段不完整: %+v", d)
 	}
 	// P2：他人不可见
-	wantBizCode(t, func() error { _, e := GetReservation(ctx, db, r.ID, 2); return e }(), CodeNotFound)
+	wantBizCode(t, func() error { _, e := GetReservation(ctx, db, r.ID, 2); return e }(), domain.CodeNotFound)
 
 	list, err := ListMyReservations(ctx, db, 1, 10)
 	if err != nil || len(list) != 1 {

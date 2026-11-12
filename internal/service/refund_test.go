@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 func refundOf(t *testing.T, db *sql.DB, reservationID int64) (int64, string, int, string) {
@@ -48,14 +48,14 @@ func TestRefundNotifyAndRetryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Result != model.RefundFailed {
+	if res.Result != domain.RefundFailed {
 		t.Fatalf("退款回调失败结果应为 FAILED，得到 %s", res.Result)
 	}
 	id, status, retry, lastErr := refundOf(t, db, r.ID)
-	if id != refundID || status != model.RefundFailed || retry != 0 || lastErr != "渠道超时" {
+	if id != refundID || status != domain.RefundFailed || retry != 0 || lastErr != "渠道超时" {
 		t.Fatalf("退款应记失败与原因、重试次数不变: id=%d status=%s retry=%d err=%s", id, status, retry, lastErr)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCancelled {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResCancelled {
 		t.Fatalf("退款失败不得改变预约状态，得到 %s", st)
 	}
 
@@ -67,26 +67,26 @@ func TestRefundNotifyAndRetryLifecycle(t *testing.T) {
 	if no != refundNoByID(t, db, refundID) {
 		t.Fatalf("应返回退款单号")
 	}
-	if _, status, retry, _ := refundOf(t, db, r.ID); status != model.RefundProcessing || retry != 1 {
+	if _, status, retry, _ := refundOf(t, db, r.ID); status != domain.RefundProcessing || retry != 1 {
 		t.Fatalf("重试后应为 PROCESSING/retry=1，得到 %s/%d", status, retry)
 	}
 
 	// 渠道回调成功 → SUCCESS
 	res, err = HandleRefundNotify(ctx, db, no, true, "", testBase.Add(4*time.Minute))
-	if err != nil || res.Result != model.RefundSuccess {
+	if err != nil || res.Result != domain.RefundSuccess {
 		t.Fatalf("退款成功回调失败: %+v err=%v", res, err)
 	}
-	if _, status, _, lastErr := refundOf(t, db, r.ID); status != model.RefundSuccess || lastErr != "" {
+	if _, status, _, lastErr := refundOf(t, db, r.ID); status != domain.RefundSuccess || lastErr != "" {
 		t.Fatalf("退款应为 SUCCESS 且清空错误，得到 %s/%s", status, lastErr)
 	}
 	// 重复成功通知幂等
 	dup, err := HandleRefundNotify(ctx, db, no, true, "", testBase.Add(5*time.Minute))
-	if err != nil || dup.Result != model.NotifyDuplicate {
+	if err != nil || dup.Result != domain.NotifyDuplicate {
 		t.Fatalf("重复退款成功通知应幂等: %+v err=%v", dup, err)
 	}
 	// 已取消预约不可核销（R4.4）
 	_, err = CheckIn(ctx, db, r.ID, 2, testBase.Add(6*time.Minute))
-	wantBizCode(t, err, CodeCheckinNotAllow)
+	wantBizCode(t, err, domain.CodeCheckinNotAllow)
 }
 
 func TestRetryRefundPermissions(t *testing.T) {
@@ -103,19 +103,19 @@ func TestRetryRefundPermissions(t *testing.T) {
 
 	// 前台不能重试退款
 	_, err = RetryRefund(ctx, db, cres.RefundID, 2, testBase.Add(3*time.Minute))
-	wantBizCode(t, err, CodeRoleForbidden)
+	wantBizCode(t, err, domain.CodeRoleForbidden)
 	// 别店客服不能重试
 	_, err = RetryRefund(ctx, db, cres.RefundID, 9, testBase.Add(3*time.Minute))
-	wantBizCode(t, err, CodeStoreMismatch)
+	wantBizCode(t, err, domain.CodeStoreMismatch)
 	// 退款单不存在
 	_, err = RetryRefund(ctx, db, 9999, 4, testBase.Add(3*time.Minute))
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 	// 重试成功后不能再重试（PROCESSING 不在失败/待处理之列）
 	if _, err := RetryRefund(ctx, db, cres.RefundID, 4, testBase.Add(3*time.Minute)); err != nil {
 		t.Fatalf("首次重试应成功: %v", err)
 	}
 	_, err = RetryRefund(ctx, db, cres.RefundID, 4, testBase.Add(4*time.Minute))
-	wantBizCode(t, err, CodeRefundNotRetry)
+	wantBizCode(t, err, domain.CodeRefundNotRetry)
 }
 
 func TestListRefundsScopeAndFilter(t *testing.T) {
@@ -144,7 +144,7 @@ func TestListRefundsScopeAndFilter(t *testing.T) {
 		t.Fatalf("本店应有 2 条退款，得到 %d err=%v", len(all), err)
 	}
 	unfinished, err := ListRefunds(ctx, db, 1, true)
-	if err != nil || len(unfinished) != 1 || unfinished[0].Status != model.RefundFailed {
+	if err != nil || len(unfinished) != 1 || unfinished[0].Status != domain.RefundFailed {
 		t.Fatalf("未完成退款应只有 1 条失败单: %+v err=%v", unfinished, err)
 	}
 	other, err := ListRefunds(ctx, db, 2, false)

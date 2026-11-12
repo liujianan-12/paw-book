@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 func recordCount(t *testing.T, db *sql.DB, table string, reservationID int64) int {
@@ -28,7 +28,7 @@ func TestCheckInRulesAndIdempotency(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	pending := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CheckIn(ctx, db, pending.ID, 2, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodeCheckinNotAllow)
+	wantBizCode(t, err, domain.CodeCheckinNotAllow)
 
 	// 已确认可核销；重复核销幂等（同员工 / 不同员工）
 	r := confirmedReservation(t, db, 2*time.Hour, 2, 3)
@@ -36,7 +36,7 @@ func TestCheckInRulesAndIdempotency(t *testing.T) {
 	if err != nil || already {
 		t.Fatalf("首次核销应成功且 alreadyDone=false: already=%v err=%v", already, err)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCheckedIn {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResCheckedIn {
 		t.Fatalf("应为已到店，得到 %s", st)
 	}
 	if n := recordCount(t, db, "checkin_record", r.ID); n != 1 {
@@ -56,11 +56,11 @@ func TestCheckInRulesAndIdempotency(t *testing.T) {
 
 	// 角色/门店校验
 	_, err = CheckIn(ctx, db, r.ID, 3, testBase.Add(5*time.Minute)) // 服务人员
-	wantBizCode(t, err, CodeRoleForbidden)
+	wantBizCode(t, err, domain.CodeRoleForbidden)
 	_, err = CheckIn(ctx, db, r.ID, 10, testBase.Add(5*time.Minute)) // 别店服务（角色先不符）
-	wantBizCode(t, err, CodeRoleForbidden)
+	wantBizCode(t, err, domain.CodeRoleForbidden)
 	_, err = CheckIn(ctx, db, 9999, 2, testBase.Add(5*time.Minute))
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 
 	// 已取消不可核销
 	r2 := confirmedReservation(t, db, 4*time.Hour, 1, 1)
@@ -68,7 +68,7 @@ func TestCheckInRulesAndIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = CheckIn(ctx, db, r2.ID, 2, testBase.Add(6*time.Minute))
-	wantBizCode(t, err, CodeCheckinNotAllow)
+	wantBizCode(t, err, domain.CodeCheckinNotAllow)
 }
 
 // —— R5.2/R5.3 开始与完成：顺序、越级、幂等 ————————————
@@ -80,10 +80,10 @@ func TestServiceStartAndComplete(t *testing.T) {
 
 	// 未核销不能开始
 	_, err := StartService(ctx, db, r.ID, 3, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodeServiceNotIn)
+	wantBizCode(t, err, domain.CodeServiceNotIn)
 	// 未开始不能完成
 	_, err = CompleteService(ctx, db, r.ID, 3, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodeServiceNotStart)
+	wantBizCode(t, err, domain.CodeServiceNotStart)
 
 	if _, err := CheckIn(ctx, db, r.ID, 2, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestServiceStartAndComplete(t *testing.T) {
 	if err != nil || already {
 		t.Fatalf("开始服务应成功: already=%v err=%v", already, err)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResInService {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResInService {
 		t.Fatalf("应为服务中，得到 %s", st)
 	}
 	// 重复开始幂等
@@ -105,7 +105,7 @@ func TestServiceStartAndComplete(t *testing.T) {
 	if err != nil || already {
 		t.Fatalf("完成服务应成功: already=%v err=%v", already, err)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCompleted {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResCompleted {
 		t.Fatalf("应为已完成，得到 %s", st)
 	}
 	already, err = CompleteService(ctx, db, r.ID, 6, testBase.Add(6*time.Minute))
@@ -123,13 +123,13 @@ func TestServiceStartAndComplete(t *testing.T) {
 
 	// 角色与门店
 	_, err = CheckIn(ctx, db, r.ID, 3, testBase.Add(7*time.Minute))
-	wantBizCode(t, err, CodeRoleForbidden) // 服务人员不能核销
+	wantBizCode(t, err, domain.CodeRoleForbidden) // 服务人员不能核销
 	r2 := confirmedReservation(t, db, 3*time.Hour, 1, 2)
 	if _, err := CheckIn(ctx, db, r2.ID, 2, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = StartService(ctx, db, r2.ID, 10, testBase.Add(3*time.Minute)) // 别店服务
-	wantBizCode(t, err, CodeStoreMismatch)
+	wantBizCode(t, err, domain.CodeStoreMismatch)
 }
 
 // —— R7.1/R7.2 未到店：时段结束、必填原因、释放名额、不退款 ——————
@@ -140,19 +140,19 @@ func TestMarkNoShow(t *testing.T) {
 	r := confirmedReservation(t, db, time.Hour, 1, 1) // 开始 07:00，结束 08:00
 
 	// 时段未结束
-	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "未到店", testBase.Add(30*time.Minute)), CodeNoShowTooEarly)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "未到店", testBase.Add(30*time.Minute)), domain.CodeNoShowTooEarly)
 	// 无原因
-	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "   ", testBase.Add(3*time.Hour)), CodeNoShowNoReason)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "   ", testBase.Add(3*time.Hour)), domain.CodeNoShowNoReason)
 	// 角色/门店
-	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 2, "未到店", testBase.Add(3*time.Hour)), CodeRoleForbidden)
-	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 8, "未到店", testBase.Add(3*time.Hour)), CodeStoreMismatch)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 2, "未到店", testBase.Add(3*time.Hour)), domain.CodeRoleForbidden)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 8, "未到店", testBase.Add(3*time.Hour)), domain.CodeStoreMismatch)
 
 	// 成功
 	if err := MarkNoShow(ctx, db, r.ID, 1, "客户未到场", testBase.Add(3*time.Hour)); err != nil {
 		t.Fatalf("时段结束后应可标记未到店: %v", err)
 	}
 	st, _ := reservationStatus(t, db, r.ID)
-	if st != model.ResNoShow {
+	if st != domain.ResNoShow {
 		t.Fatalf("应为未到店，得到 %s", st)
 	}
 	var noShowAt sql.NullString
@@ -170,7 +170,7 @@ func TestMarkNoShow(t *testing.T) {
 		t.Fatalf("未到店不得产生退款，得到 %d err=%v", refunds, err)
 	}
 	// 终态不可逆
-	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "再标一次", testBase.Add(4*time.Hour)), CodeNotNoShowable)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "再标一次", testBase.Add(4*time.Hour)), domain.CodeNotNoShowable)
 
 	// 已完成的预约不能标记未到店（R7.1 仅已确认）
 	done := confirmedReservation(t, db, 2*time.Hour, 1, 2)
@@ -183,5 +183,5 @@ func TestMarkNoShow(t *testing.T) {
 	if _, err := CompleteService(ctx, db, done.ID, 3, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	wantBizCode(t, MarkNoShow(ctx, db, done.ID, 1, "已完成", testBase.Add(6*time.Hour)), CodeNotNoShowable)
+	wantBizCode(t, MarkNoShow(ctx, db, done.ID, 1, "已完成", testBase.Add(6*time.Hour)), domain.CodeNotNoShowable)
 }

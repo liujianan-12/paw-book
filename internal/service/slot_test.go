@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 	"paw-book/internal/store"
 )
 
@@ -63,7 +64,7 @@ func mustCreateSlot(t *testing.T, db *sql.DB, startIn, dur time.Duration, capaci
 	return id
 }
 
-func mustCreateReservation(t *testing.T, db *sql.DB, slotID, userID, petID int64, now time.Time) *model.Reservation {
+func mustCreateReservation(t *testing.T, db *sql.DB, slotID, userID, petID int64, now time.Time) *domain.Reservation {
 	t.Helper()
 	r, err := CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: slotID, UserID: userID, PetID: petID}, now, 5*time.Minute)
@@ -78,9 +79,9 @@ func wantBizCode(t *testing.T, err error, code string) {
 	if err == nil {
 		t.Fatalf("期望错误码 %s，但操作成功了", code)
 	}
-	var be *BizError
+	var be *domain.BizError
 	if !errors.As(err, &be) {
-		t.Fatalf("应返回 BizError，得到 %T: %v", err, err)
+		t.Fatalf("应返回 domain.BizError，得到 %T: %v", err, err)
 	}
 	if be.Code != code {
 		t.Fatalf("错误码应为 %s，得到 %s（%s）", code, be.Code, be.Msg)
@@ -110,7 +111,7 @@ func activeCount(t *testing.T, db *sql.DB, slotID int64, now time.Time) int {
 		WHERE slot_id=? AND (
 		  status IN ('CONFIRMED','CANCELLATION_REVIEW','CHECKED_IN','IN_SERVICE','COMPLETED')
 		  OR (status='PENDING_PAYMENT' AND pay_expire_at>?)
-		)`, slotID, fmtTime(now)).Scan(&n); err != nil {
+		)`, slotID, repo.FmtTime(now)).Scan(&n); err != nil {
 		t.Fatalf("统计有效预约: %v", err)
 	}
 	return n
@@ -136,12 +137,12 @@ func TestCreateSlotValidations(t *testing.T) {
 		p    CreateSlotParams
 		code string
 	}{
-		{"结束不晚于开始", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(2 * time.Hour), Capacity: 3}, CodeInvalidParam},
-		{"开始时间在过去", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(-time.Hour), EndAt: testBase.Add(time.Hour), Capacity: 3}, CodeInvalidParam},
-		{"容量超上限", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 4}, CodeInvalidParam},
-		{"容量为零", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 0}, CodeInvalidParam},
-		{"非店长创建", CreateSlotParams{ActorID: 2, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 3}, CodeRoleForbidden},
-		{"店长跨店创建", CreateSlotParams{ActorID: 8, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 3}, CodeStoreMismatch},
+		{"结束不晚于开始", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(2 * time.Hour), Capacity: 3}, domain.CodeInvalidParam},
+		{"开始时间在过去", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(-time.Hour), EndAt: testBase.Add(time.Hour), Capacity: 3}, domain.CodeInvalidParam},
+		{"容量超上限", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 4}, domain.CodeInvalidParam},
+		{"容量为零", CreateSlotParams{ActorID: 1, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 0}, domain.CodeInvalidParam},
+		{"非店长创建", CreateSlotParams{ActorID: 2, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 3}, domain.CodeRoleForbidden},
+		{"店长跨店创建", CreateSlotParams{ActorID: 8, StoreID: 1, ItemID: 1, StartAt: testBase.Add(2 * time.Hour), EndAt: testBase.Add(3 * time.Hour), Capacity: 3}, domain.CodeStoreMismatch},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

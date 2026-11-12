@@ -1,4 +1,4 @@
-package biz
+package domain
 
 import "fmt"
 
@@ -46,6 +46,6 @@ type BizError struct {
 
 func (e *BizError) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Msg) }
 
-func errf(code, format string, a ...any) *BizError {
+func Errf(code, format string, a ...any) *BizError {
 	return &BizError{Code: code, Msg: fmt.Sprintf(format, a...)}
 }

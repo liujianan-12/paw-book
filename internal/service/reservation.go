@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // CreateReservationParams 创建预约参数（R1.2/R1.3/R1.4/R2.1）。
@@ -21,21 +22,21 @@ type CreateReservationParams struct {
 // 名额采用"条件自增"：UPDATE slot SET reserved_count=reserved_count+1
 // WHERE id=? AND reserved_count<capacity AND start_at>?
 // 一条语句同时完成"加锁 + 容量校验 + 开始时间校验"，避免先查后改。
-func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, now time.Time, payHold time.Duration) (*model.Reservation, error) {
+func CreateReservation(ctx context.Context, db repo.DBTX, p CreateReservationParams, now time.Time, payHold time.Duration) (*domain.Reservation, error) {
 	// R1.2：宠物归属（改请求 ID 无法替他人宠物预约）
 	var ownerID int64
 	err := db.QueryRowContext(ctx, `SELECT user_id FROM pet WHERE id=?`, p.PetID).Scan(&ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodePetNotFound, "宠物不存在")
+		return nil, domain.Errf(domain.CodePetNotFound, "宠物不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 	if ownerID != p.UserID {
-		return nil, errf(CodePetNotOwned, "只能为本人名下的宠物预约")
+		return nil, domain.Errf(domain.CodePetNotOwned, "只能为本人名下的宠物预约")
 	}
 
-	tx, err := beginTx(ctx, db)
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +50,7 @@ func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, 
 	// R1.3/R1.4：容量与开始时间在同一条件内校验
 	res, err := tx.ExecContext(ctx,
 		`UPDATE slot SET reserved_count=reserved_count+1 WHERE id=? AND reserved_count<capacity AND start_at>?`,
-		p.SlotID, fmtTime(now))
+		p.SlotID, repo.FmtTime(now))
 	if err != nil {
 		return nil, err
 	}
@@ -59,19 +60,19 @@ func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, 
 		qerr := tx.QueryRowContext(ctx, `SELECT capacity, reserved_count, start_at FROM slot WHERE id=?`, p.SlotID).
 			Scan(&capacity, &reserved, &startAt)
 		if errors.Is(qerr, sql.ErrNoRows) {
-			return nil, errf(CodeSlotNotFound, "时段不存在")
+			return nil, domain.Errf(domain.CodeSlotNotFound, "时段不存在")
 		}
 		if qerr != nil {
 			return nil, qerr
 		}
-		start, perr := parseTime(startAt)
+		start, perr := repo.ParseTime(startAt)
 		if perr != nil {
 			return nil, perr
 		}
 		if !now.Before(start) {
-			return nil, errf(CodeSlotStarted, "时段已开始，不可预约")
+			return nil, domain.Errf(domain.CodeSlotStarted, "时段已开始，不可预约")
 		}
-		return nil, errf(CodeSlotFull, "该时段名额已满（%d/%d）", reserved, capacity)
+		return nil, domain.Errf(domain.CodeSlotFull, "该时段名额已满（%d/%d）", reserved, capacity)
 	}
 
 	s, err := slotByID(ctx, tx, p.SlotID)
@@ -81,23 +82,23 @@ func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, 
 	var price int64
 	if err := tx.QueryRowContext(ctx, `SELECT price_cents FROM service_item WHERE id=? AND active=1`, s.ItemID).Scan(&price); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errf(CodeNotFound, "服务项目不存在或已下架")
+			return nil, domain.Errf(domain.CodeNotFound, "服务项目不存在或已下架")
 		}
 		return nil, err
 	}
 
 	expireAt := now.Add(payHold)
-	created := fmtTime(now)
+	created := repo.FmtTime(now)
 	ins, err := tx.ExecContext(ctx, `
 		INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 		                        pay_expire_at, seat_released, version, created_at, updated_at)
 		VALUES(?,?,?,?,?,?,?,?,0,0,?,?)`,
-		s.StoreID, p.SlotID, p.UserID, p.PetID, s.ItemID, model.ResPendingPayment, price,
-		fmtTime(expireAt), created, created)
+		s.StoreID, p.SlotID, p.UserID, p.PetID, s.ItemID, domain.ResPendingPayment, price,
+		repo.FmtTime(expireAt), created, created)
 	if err != nil {
 		// I3 兜底：部分唯一索引冲突说明同宠物同时段已有有效预约（事务回滚自动撤销名额 +1）
-		if isConstraintViolation(err, "reservation", "slot_id", "pet_id") || strings.Contains(err.Error(), "uk_slot_pet_active") {
-			return nil, errf(CodeDuplicateActive, "该宠物在此时段已有有效预约")
+		if repo.IsConstraintViolation(err, "reservation", "slot_id", "pet_id") || strings.Contains(err.Error(), "uk_slot_pet_active") {
+			return nil, domain.Errf(domain.CodeDuplicateActive, "该宠物在此时段已有有效预约")
 		}
 		return nil, err
 	}
@@ -105,21 +106,21 @@ func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, 
 	if err != nil {
 		return nil, err
 	}
-	if err := audit(ctx, tx, p.UserID, "user", s.StoreID, "RESERVATION_CREATE", "reservation", id, "ok", "", now); err != nil {
+	if err := repo.Audit(ctx, tx, p.UserID, "user", s.StoreID, "RESERVATION_CREATE", "reservation", id, "ok", "", now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &model.Reservation{
+	return &domain.Reservation{
 		ID: id, StoreID: s.StoreID, SlotID: p.SlotID, UserID: p.UserID, PetID: p.PetID, ItemID: s.ItemID,
-		Status: model.ResPendingPayment, PriceCents: price, PayExpireAt: expireAt, CreatedAt: now, UpdatedAt: now,
+		Status: domain.ResPendingPayment, PriceCents: price, PayExpireAt: expireAt, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
 // CancelUnpaid 用户取消未支付预约（R2.3：释放名额，不产生退款）。
-func CancelUnpaid(ctx context.Context, db DBTX, reservationID, userID int64, now time.Time) error {
-	tx, err := beginTx(ctx, db)
+func CancelUnpaid(ctx context.Context, db repo.DBTX, reservationID, userID int64, now time.Time) error {
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -131,30 +132,30 @@ func CancelUnpaid(ctx context.Context, db DBTX, reservationID, userID int64, now
 	err = tx.QueryRowContext(ctx, `SELECT user_id, slot_id, status FROM reservation WHERE id=?`, reservationID).
 		Scan(&ownerID, &slotID, &status)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && ownerID != userID) {
-		return errf(CodeNotFound, "预约不存在")
+		return domain.Errf(domain.CodeNotFound, "预约不存在")
 	}
 	if err != nil {
 		return err
 	}
-	if status != model.ResPendingPayment {
-		return errf(CodeStateInvalid, "当前状态（%s）不可主动取消，仅待支付可取消", status)
+	if status != domain.ResPendingPayment {
+		return domain.Errf(domain.CodeStateInvalid, "当前状态（%s）不可主动取消，仅待支付可取消", status)
 	}
 
 	res, err := tx.ExecContext(ctx,
 		`UPDATE reservation SET status=?, cancel_type=?, cancelled_at=?, seat_released=1, updated_at=?
 		 WHERE id=? AND status=? AND seat_released=0`,
-		model.ResCancelled, model.CancelUserUnpaid, fmtTime(now), fmtTime(now), reservationID, model.ResPendingPayment)
+		domain.ResCancelled, domain.CancelUserUnpaid, repo.FmtTime(now), repo.FmtTime(now), reservationID, domain.ResPendingPayment)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return errf(CodeStateInvalid, "预约状态已变化，取消失败")
+		return domain.Errf(domain.CodeStateInvalid, "预约状态已变化，取消失败")
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE slot SET reserved_count=reserved_count-1 WHERE id=? AND reserved_count>0`, slotID); err != nil {
 		return err
 	}
-	if err := audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_UNPAID", "reservation", reservationID, "ok", "", now); err != nil {
+	if err := repo.Audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_UNPAID", "reservation", reservationID, "ok", "", now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -162,7 +163,7 @@ func CancelUnpaid(ctx context.Context, db DBTX, reservationID, userID int64, now
 
 // ReservationDetail 预约详情视图（A7：预约 + 取消申请 + 退款 + 服务进度）。
 type ReservationDetail struct {
-	model.Reservation
+	domain.Reservation
 	PetName       string
 	UserName      string
 	SlotStart     string
@@ -177,7 +178,7 @@ type ReservationDetail struct {
 }
 
 // GetReservation 查询预约详情；userID>0 时校验归属（P2）。
-func GetReservation(ctx context.Context, db DBTX, reservationID, userID int64) (*ReservationDetail, error) {
+func GetReservation(ctx context.Context, db repo.DBTX, reservationID, userID int64) (*ReservationDetail, error) {
 	var d ReservationDetail
 	var payExpire, createdAt, updatedAt string
 	var paidAt, checkedIn, started, completed, noShowAt, cancelledAt sql.NullString
@@ -196,17 +197,17 @@ func GetReservation(ctx context.Context, db DBTX, reservationID, userID int64) (
 		&payExpire, &paidAt, &checkedIn, &started, &completed, &noShowAt, &d.NoShowReason, &cancelledAt, &d.CancelType,
 		&d.SeatReleased, &createdAt, &updatedAt, &d.PetName, &d.UserName, &d.SlotStart, &d.SlotEnd)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodeNotFound, "预约不存在")
+		return nil, domain.Errf(domain.CodeNotFound, "预约不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 	if userID > 0 && d.UserID != userID {
-		return nil, errf(CodeNotFound, "预约不存在")
+		return nil, domain.Errf(domain.CodeNotFound, "预约不存在")
 	}
-	d.PayExpireAt, _ = parseTime(payExpire)
-	d.CreatedAt, _ = parseTime(createdAt)
-	d.UpdatedAt, _ = parseTime(updatedAt)
+	d.PayExpireAt, _ = repo.ParseTime(payExpire)
+	d.CreatedAt, _ = repo.ParseTime(createdAt)
+	d.UpdatedAt, _ = repo.ParseTime(updatedAt)
 
 	// 取消申请（取最近一条）
 	var reqStatus, reqReason sql.NullString
@@ -232,7 +233,7 @@ func GetReservation(ctx context.Context, db DBTX, reservationID, userID int64) (
 }
 
 // ListMyReservations 用户自己的预约列表（A8）。
-func ListMyReservations(ctx context.Context, db DBTX, userID int64, limit int) ([]ReservationDetail, error) {
+func ListMyReservations(ctx context.Context, db repo.DBTX, userID int64, limit int) ([]ReservationDetail, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}

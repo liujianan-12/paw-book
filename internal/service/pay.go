@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // CreatePayment 为待支付预约发起一次支付（A4/R2.1/R2.7）。
 // 每次调用生成新的支付流水与新 order_no；同一预约最多一条成功支付（uk_payment_success）。
-func CreatePayment(ctx context.Context, db DBTX, reservationID, userID int64, now time.Time) (*model.Payment, error) {
-	tx, err := beginTx(ctx, db)
+func CreatePayment(ctx context.Context, db repo.DBTX, reservationID, userID int64, now time.Time) (*domain.Payment, error) {
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -25,15 +26,15 @@ func CreatePayment(ctx context.Context, db DBTX, reservationID, userID int64, no
 		`SELECT user_id, status, price_cents, pay_expire_at FROM reservation WHERE id=?`, reservationID).
 		Scan(&ownerID, &status, &price, &expireAt)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && ownerID != userID) {
-		return nil, errf(CodeNotFound, "预约不存在")
+		return nil, domain.Errf(domain.CodeNotFound, "预约不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
-	if status != model.ResPendingPayment {
-		return nil, errf(CodePaymentNotPend, "仅待支付状态可发起支付（当前 %s）", status)
+	if status != domain.ResPendingPayment {
+		return nil, domain.Errf(domain.CodePaymentNotPend, "仅待支付状态可发起支付（当前 %s）", status)
 	}
-	exp, err := parseTime(expireAt)
+	exp, err := repo.ParseTime(expireAt)
 	if err != nil {
 		return nil, err
 	}
@@ -45,17 +46,17 @@ func CreatePayment(ctx context.Context, db DBTX, reservationID, userID int64, no
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return nil, errf(CodePaymentExpired, "支付超时，预约已释放名额")
+		return nil, domain.Errf(domain.CodePaymentExpired, "支付超时，预约已释放名额")
 	}
 
 	var succeeded int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM payment WHERE reservation_id=? AND status=?`,
-		reservationID, model.PaySuccess).Scan(&succeeded); err != nil {
+		reservationID, domain.PaySuccess).Scan(&succeeded); err != nil {
 		return nil, err
 	}
 	if succeeded > 0 {
-		return nil, errf(CodePaymentNotPend, "该预约已支付成功")
+		return nil, domain.Errf(domain.CodePaymentNotPend, "该预约已支付成功")
 	}
 	var attempt int
 	if err := tx.QueryRowContext(ctx,
@@ -68,7 +69,7 @@ func CreatePayment(ctx context.Context, db DBTX, reservationID, userID int64, no
 	ins, err := tx.ExecContext(ctx,
 		`INSERT INTO payment(reservation_id, order_no, amount_cents, channel, status, created_at)
 		 VALUES(?,?,?,?,?,?)`,
-		reservationID, orderNo, price, "mock", model.PayInit, fmtTime(now))
+		reservationID, orderNo, price, "mock", domain.PayInit, repo.FmtTime(now))
 	if err != nil {
 		return nil, err
 	}
@@ -76,15 +77,15 @@ func CreatePayment(ctx context.Context, db DBTX, reservationID, userID int64, no
 	if err != nil {
 		return nil, err
 	}
-	if err := audit(ctx, tx, userID, "user", 0, "PAYMENT_CREATE", "payment", payID, "ok", orderNo, now); err != nil {
+	if err := repo.Audit(ctx, tx, userID, "user", 0, "PAYMENT_CREATE", "payment", payID, "ok", orderNo, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &model.Payment{
+	return &domain.Payment{
 		ID: payID, ReservationID: reservationID, OrderNo: orderNo, AmountCents: price,
-		Channel: "mock", Status: model.PayInit, CreatedAt: now, Attempt: attempt,
+		Channel: "mock", Status: domain.PayInit, CreatedAt: now, Attempt: attempt,
 	}, nil
 }
 
@@ -98,8 +99,8 @@ type PayNotifyResult struct {
 
 // HandlePayNotify 处理支付渠道回调（R2.4/R2.5/R2.6，幂等第一道闸为 channel_txn_id 唯一）。
 // 成功且预约待支付未过期 → 确认；预约已关闭（过期/取消）→ 登记异常并退款，预约状态不变。
-func HandlePayNotify(ctx context.Context, db DBTX, channelTxnID, orderNo string, success bool, now time.Time) (*PayNotifyResult, error) {
-	tx, err := beginTx(ctx, db)
+func HandlePayNotify(ctx context.Context, db repo.DBTX, channelTxnID, orderNo string, success bool, now time.Time) (*PayNotifyResult, error) {
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func HandlePayNotify(ctx context.Context, db DBTX, channelTxnID, orderNo string,
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return &PayNotifyResult{Result: model.NotifyDuplicate}, nil
+		return &PayNotifyResult{Result: domain.NotifyDuplicate}, nil
 	}
 
 	var payID, resID, amount int64
@@ -124,35 +125,35 @@ func HandlePayNotify(ctx context.Context, db DBTX, channelTxnID, orderNo string,
 		`SELECT id, reservation_id, amount_cents, status FROM payment WHERE order_no=?`, orderNo).
 		Scan(&payID, &resID, &amount, &payStatus)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodePaymentNotFound, "支付单不存在: %s", orderNo)
+		return nil, domain.Errf(domain.CodePaymentNotFound, "支付单不存在: %s", orderNo)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	result := model.NotifyRejected
+	result := domain.NotifyRejected
 	var refundID int64
 
 	switch {
 	case !success:
 		// R2.7：支付失败不改预约状态，仍为待支付，可再次发起支付
-		if payStatus != model.PaySuccess {
+		if payStatus != domain.PaySuccess {
 			if _, err := tx.ExecContext(ctx, `UPDATE payment SET status=? WHERE id=?`,
-				model.PayFailed, payID); err != nil {
+				domain.PayFailed, payID); err != nil {
 				return nil, err
 			}
 		}
-	case payStatus == model.PaySuccess:
+	case payStatus == domain.PaySuccess:
 		// 同一支付单重复成功通知：幂等
-		result = model.NotifyDuplicate
+		result = domain.NotifyDuplicate
 	default:
 		// 该预约是否已有另一条成功支付（不同支付流水重复成功）→ 不重复记收款
 		var otherID int64
 		qerr := tx.QueryRowContext(ctx,
 			`SELECT id FROM payment WHERE reservation_id=? AND status=? AND id<>?`,
-			resID, model.PaySuccess, payID).Scan(&otherID)
+			resID, domain.PaySuccess, payID).Scan(&otherID)
 		if qerr == nil {
-			result = model.NotifyDuplicate
+			result = domain.NotifyDuplicate
 		} else if !errors.Is(qerr, sql.ErrNoRows) {
 			return nil, qerr
 		} else {
@@ -165,10 +166,10 @@ func HandlePayNotify(ctx context.Context, db DBTX, channelTxnID, orderNo string,
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO payment_notification(channel_txn_id, order_no, result, received_at) VALUES(?,?,?,?)`,
-		channelTxnID, orderNo, result, fmtTime(now)); err != nil {
+		channelTxnID, orderNo, result, repo.FmtTime(now)); err != nil {
 		return nil, err
 	}
-	if err := audit(ctx, tx, 0, "system", 0, "PAYMENT_NOTIFY", "payment", payID, result, orderNo, now); err != nil {
+	if err := repo.Audit(ctx, tx, 0, "system", 0, "PAYMENT_NOTIFY", "payment", payID, result, orderNo, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -178,7 +179,7 @@ func HandlePayNotify(ctx context.Context, db DBTX, channelTxnID, orderNo string,
 }
 
 // applyPaySuccess 在事务内落地一次新的支付成功（确认或异常退款）。
-func applyPaySuccess(ctx context.Context, tx DBTX, payID, resID, amount int64, channelTxnID string, now time.Time) (int64, string, error) {
+func applyPaySuccess(ctx context.Context, tx repo.DBTX, payID, resID, amount int64, channelTxnID string, now time.Time) (int64, string, error) {
 	// 先把可能已到期的占位清理为 EXPIRED（R2.2），再判断预约是否仍待支付
 	if _, err := expireReservationTx(ctx, tx, resID, now); err != nil {
 		return 0, "", err
@@ -187,7 +188,7 @@ func applyPaySuccess(ctx context.Context, tx DBTX, payID, resID, amount int64, c
 	res, err := tx.ExecContext(ctx,
 		`UPDATE reservation SET status=?, paid_at=?, updated_at=?
 		 WHERE id=? AND status=? AND seat_released=0`,
-		model.ResConfirmed, fmtTime(now), fmtTime(now), resID, model.ResPendingPayment)
+		domain.ResConfirmed, repo.FmtTime(now), repo.FmtTime(now), resID, domain.ResPendingPayment)
 	if err != nil {
 		return 0, "", err
 	}
@@ -195,15 +196,15 @@ func applyPaySuccess(ctx context.Context, tx DBTX, payID, resID, amount int64, c
 		// 正常确认：本支付流水成功，其余未完成尝试标记为被取代
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE payment SET status=?, paid_at=?, provider_txn_id=? WHERE id=?`,
-			model.PaySuccess, fmtTime(now), channelTxnID, payID); err != nil {
+			domain.PaySuccess, repo.FmtTime(now), channelTxnID, payID); err != nil {
 			return 0, "", err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE payment SET status=? WHERE reservation_id=? AND status=? AND id<>?`,
-			model.PayFailed, resID, model.PayInit, payID); err != nil {
+			domain.PayFailed, resID, domain.PayInit, payID); err != nil {
 			return 0, "", err
 		}
-		return 0, model.NotifyConfirmed, nil
+		return 0, domain.NotifyConfirmed, nil
 	}
 
 	// 预约已关闭（已取消/已过期/其他终态）：登记异常 + 退款，预约状态不变（R2.6/I10）
@@ -213,18 +214,18 @@ func applyPaySuccess(ctx context.Context, tx DBTX, payID, resID, amount int64, c
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE payment SET status=?, paid_at=?, provider_txn_id=? WHERE id=?`,
-		model.PaySuccess, fmtTime(now), channelTxnID, payID); err != nil {
+		domain.PaySuccess, repo.FmtTime(now), channelTxnID, payID); err != nil {
 		return 0, "", err
 	}
 	detail := fmt.Sprintf("预约状态 %s 后收到支付成功通知", resStatus)
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO payment_anomaly(reservation_id, payment_id, kind, detail, created_at) VALUES(?,?,?,?,?)`,
-		resID, payID, model.ReasonLatePayment, detail, fmtTime(now)); err != nil {
+		resID, payID, domain.ReasonLatePayment, detail, repo.FmtTime(now)); err != nil {
 		return 0, "", err
 	}
-	refundID, err := ensureRefund(ctx, tx, resID, payID, amount, model.ReasonLatePayment, now)
+	refundID, err := ensureRefund(ctx, tx, resID, payID, amount, domain.ReasonLatePayment, now)
 	if err != nil {
 		return 0, "", err
 	}
-	return refundID, model.NotifyAnomalyRefund, nil
+	return refundID, domain.NotifyAnomalyRefund, nil
 }

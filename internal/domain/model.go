@@ -1,6 +1,6 @@
 // Package model 定义业务实体与状态常量（唯一来源，见 .agent/02 §3）。
 // 任何业务代码禁止散落状态字符串。
-package model
+package domain
 
 import "time"
 

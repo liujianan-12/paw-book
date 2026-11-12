@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // ensureRefund 创建退款单；同一预约只有一条（I8），已存在则复用。
-func ensureRefund(ctx context.Context, db DBTX, reservationID, paymentID, amount int64, reason string, now time.Time) (int64, error) {
+func ensureRefund(ctx context.Context, db repo.DBTX, reservationID, paymentID, amount int64, reason string, now time.Time) (int64, error) {
 	var id int64
 	err := db.QueryRowContext(ctx, `SELECT id FROM refund WHERE reservation_id=?`, reservationID).Scan(&id)
 	if err == nil {
@@ -24,7 +25,7 @@ func ensureRefund(ctx context.Context, db DBTX, reservationID, paymentID, amount
 	res, err := db.ExecContext(ctx, `
 		INSERT INTO refund(refund_no, payment_id, reservation_id, amount_cents, reason, status, retry_count, created_at, updated_at)
 		VALUES(?,?,?,?,?,?,0,?,?)`,
-		refundNo, paymentID, reservationID, amount, reason, model.RefundPending, fmtTime(now), fmtTime(now))
+		refundNo, paymentID, reservationID, amount, reason, domain.RefundPending, repo.FmtTime(now), repo.FmtTime(now))
 	if err != nil {
 		return 0, err
 	}
@@ -39,8 +40,8 @@ type RefundNotifyResult struct {
 
 // HandleRefundNotify 处理退款回调（R4.3/R4.4）。
 // 退款成功/失败只影响退款单，不改变预约状态（I6）。
-func HandleRefundNotify(ctx context.Context, db DBTX, refundNo string, success bool, failReason string, now time.Time) (*RefundNotifyResult, error) {
-	tx, err := beginTx(ctx, db)
+func HandleRefundNotify(ctx context.Context, db repo.DBTX, refundNo string, success bool, failReason string, now time.Time) (*RefundNotifyResult, error) {
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -50,35 +51,35 @@ func HandleRefundNotify(ctx context.Context, db DBTX, refundNo string, success b
 	var status string
 	err = tx.QueryRowContext(ctx, `SELECT id, status FROM refund WHERE refund_no=?`, refundNo).Scan(&refundID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodeNotFound, "退款单不存在: %s", refundNo)
+		return nil, domain.Errf(domain.CodeNotFound, "退款单不存在: %s", refundNo)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if status == model.RefundSuccess {
+	if status == domain.RefundSuccess {
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		return &RefundNotifyResult{RefundID: refundID, Result: model.NotifyDuplicate}, nil
+		return &RefundNotifyResult{RefundID: refundID, Result: domain.NotifyDuplicate}, nil
 	}
 
-	result := model.RefundFailed
+	result := domain.RefundFailed
 	if success {
-		result = model.RefundSuccess
+		result = domain.RefundSuccess
 		if _, err := tx.ExecContext(ctx, `UPDATE refund SET status=?, updated_at=?, last_error=NULL WHERE id=?`,
-			model.RefundSuccess, fmtTime(now), refundID); err != nil {
+			domain.RefundSuccess, repo.FmtTime(now), refundID); err != nil {
 			return nil, err
 		}
 	} else {
 		if failReason == "" {
-			failReason = model.ReasonChannelError
+			failReason = domain.ReasonChannelError
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE refund SET status=?, last_error=?, updated_at=? WHERE id=?`,
-			model.RefundFailed, failReason, fmtTime(now), refundID); err != nil {
+			domain.RefundFailed, failReason, repo.FmtTime(now), refundID); err != nil {
 			return nil, err
 		}
 	}
-	if err := audit(ctx, tx, 0, "system", 0, "REFUND_NOTIFY", "refund", refundID, result, failReason, now); err != nil {
+	if err := repo.Audit(ctx, tx, 0, "system", 0, "REFUND_NOTIFY", "refund", refundID, result, failReason, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -89,13 +90,13 @@ func HandleRefundNotify(ctx context.Context, db DBTX, refundNo string, success b
 
 // RetryRefund 客服重试退款（R4.4）：仅 FAILED/PENDING 可重试，retry_count+1。
 // 返回退款单号，供调用方向模拟渠道重新发起退款。
-func RetryRefund(ctx context.Context, db DBTX, refundID, employeeID int64, now time.Time) (string, error) {
-	storeID, err := checkStaff(ctx, db, employeeID, model.RoleCS)
+func RetryRefund(ctx context.Context, db repo.DBTX, refundID, employeeID int64, now time.Time) (string, error) {
+	storeID, err := repo.CheckStaff(ctx, db, employeeID, domain.RoleCS)
 	if err != nil {
 		return "", err
 	}
 
-	tx, err := beginTx(ctx, db)
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return "", err
 	}
@@ -108,23 +109,23 @@ func RetryRefund(ctx context.Context, db DBTX, refundID, employeeID int64, now t
 		`SELECT f.refund_no, f.status, r.store_id FROM refund f JOIN reservation r ON r.id=f.reservation_id WHERE f.id=?`,
 		refundID).Scan(&refundNo, &status, &resStore)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errf(CodeNotFound, "退款单不存在")
+		return "", domain.Errf(domain.CodeNotFound, "退款单不存在")
 	}
 	if err != nil {
 		return "", err
 	}
 	if resStore != storeID {
-		return "", errf(CodeStoreMismatch, "非本店员工无权操作本店退款")
+		return "", domain.Errf(domain.CodeStoreMismatch, "非本店员工无权操作本店退款")
 	}
-	if status != model.RefundFailed && status != model.RefundPending {
-		return "", errf(CodeRefundNotRetry, "仅失败或待处理的退款可重试（当前 %s）", status)
+	if status != domain.RefundFailed && status != domain.RefundPending {
+		return "", domain.Errf(domain.CodeRefundNotRetry, "仅失败或待处理的退款可重试（当前 %s）", status)
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE refund SET status=?, retry_count=retry_count+1, updated_at=? WHERE id=?`,
-		model.RefundProcessing, fmtTime(now), refundID); err != nil {
+		domain.RefundProcessing, repo.FmtTime(now), refundID); err != nil {
 		return "", err
 	}
-	if err := audit(ctx, tx, employeeID, model.RoleCS, storeID, "REFUND_RETRY", "refund", refundID, "ok", "", now); err != nil {
+	if err := repo.Audit(ctx, tx, employeeID, domain.RoleCS, storeID, "REFUND_RETRY", "refund", refundID, "ok", "", now); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(); err != nil {
@@ -148,7 +149,7 @@ type RefundView struct {
 }
 
 // ListRefunds 查询本店退款（onlyUnfinished=true 时只返回 PENDING/PROCESSING/FAILED）。
-func ListRefunds(ctx context.Context, db DBTX, storeID int64, onlyUnfinished bool) ([]RefundView, error) {
+func ListRefunds(ctx context.Context, db repo.DBTX, storeID int64, onlyUnfinished bool) ([]RefundView, error) {
 	cond := ""
 	if onlyUnfinished {
 		cond = " AND f.status IN ('PENDING','PROCESSING','FAILED')"

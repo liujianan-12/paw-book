@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 func cancelRequestStatus(t *testing.T, db *sql.DB, requestID int64) (string, string) {
@@ -34,10 +34,10 @@ func TestCancelEarlyAutoAccepted(t *testing.T) {
 	if !res.AutoAccepted || res.RefundID == 0 {
 		t.Fatalf("应返回自动受理与退款单: %+v", res)
 	}
-	if st, ct := reservationStatus(t, db, r.ID); st != model.ResCancelled || ct != model.CancelAutoBefore2H {
+	if st, ct := reservationStatus(t, db, r.ID); st != domain.ResCancelled || ct != domain.CancelAutoBefore2H {
 		t.Fatalf("应为已取消/自动受理，得到 %s/%s", st, ct)
 	}
-	if _, status, _, _ := refundOf(t, db, r.ID); status != model.RefundPending {
+	if _, status, _, _ := refundOf(t, db, r.ID); status != domain.RefundPending {
 		t.Fatalf("退款应待处理，得到 %s", status)
 	}
 	// 退款金额 = 支付金额 9900（I4）
@@ -83,7 +83,7 @@ func TestCancelNearStartRequiresReasonAndKeepsSeat(t *testing.T) {
 	wantBizCode(t, func() error {
 		_, err := CancelReservation(ctx, db, r.ID, 1, "  ", testBase.Add(time.Minute), 2*time.Hour)
 		return err
-	}(), CodeCancelReason)
+	}(), domain.CodeCancelReason)
 
 	res, err := CancelReservation(ctx, db, r.ID, 1, "宠物临时生病", testBase.Add(time.Minute), 2*time.Hour)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestCancelNearStartRequiresReasonAndKeepsSeat(t *testing.T) {
 	if res.AutoAccepted || res.RequestID == 0 {
 		t.Fatalf("应返回审核单: %+v", res)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCancellationReview {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResCancellationReview {
 		t.Fatalf("预约应为取消审核中，得到 %s", st)
 	}
 	if n := reservedCount(t, db, r.SlotID); n != 1 {
@@ -100,14 +100,14 @@ func TestCancelNearStartRequiresReasonAndKeepsSeat(t *testing.T) {
 	}
 	// 待审期间不得核销（R3.3）
 	_, err = CheckIn(ctx, db, r.ID, 2, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodeCheckinPending)
+	wantBizCode(t, err, domain.CodeCheckinPending)
 	// 同宠物再约冲突（名额仍占用）
 	_, err = CreateReservation(ctx, db, CreateReservationParams{SlotID: r.SlotID, UserID: 1, PetID: 1},
 		testBase.Add(2*time.Minute), 5*time.Minute)
-	wantBizCode(t, err, CodeDuplicateActive)
+	wantBizCode(t, err, domain.CodeDuplicateActive)
 	// 待审中重复提交（A6/A10）
 	_, err = CancelReservation(ctx, db, r.ID, 1, "再提一次", testBase.Add(3*time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeCancelAlreadyPending)
+	wantBizCode(t, err, domain.CodeCancelAlreadyPending)
 }
 
 // —— R4.1/R4.2 客服批准：取消 + 退款 + 只释放一次 ——————————
@@ -124,27 +124,27 @@ func TestReviewApprove(t *testing.T) {
 	if err := ReviewCancel(ctx, db, res.RequestID, 4, true, "同意", testBase.Add(10*time.Minute)); err != nil {
 		t.Fatalf("客服批准应成功: %v", err)
 	}
-	if st, ct := reservationStatus(t, db, r.ID); st != model.ResCancelled || ct != model.CancelCSApproved {
+	if st, ct := reservationStatus(t, db, r.ID); st != domain.ResCancelled || ct != domain.CancelCSApproved {
 		t.Fatalf("应为已取消/客服批准，得到 %s/%s", st, ct)
 	}
-	if st, note := cancelRequestStatus(t, db, res.RequestID); st != model.CancelReqApproved || note != "同意" {
+	if st, note := cancelRequestStatus(t, db, res.RequestID); st != domain.CancelReqApproved || note != "同意" {
 		t.Fatalf("申请应为批准并记录备注，得到 %s/%s", st, note)
 	}
 	if n := reservedCount(t, db, r.SlotID); n != 0 {
 		t.Fatalf("名额应释放为 0，得到 %d", n)
 	}
-	if _, status, _, _ := refundOf(t, db, r.ID); status != model.RefundPending {
+	if _, status, _, _ := refundOf(t, db, r.ID); status != domain.RefundPending {
 		t.Fatalf("批准后应创建退款，得到 %s", status)
 	}
 	// 批准后不可核销且无核销记录（R4.1）
 	_, err = CheckIn(ctx, db, r.ID, 2, testBase.Add(11*time.Minute))
-	wantBizCode(t, err, CodeCheckinNotAllow)
+	wantBizCode(t, err, domain.CodeCheckinNotAllow)
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM checkin_record WHERE reservation_id=?`, r.ID).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("不应有核销记录，得到 %d err=%v", n, err)
 	}
 	// 重复批准：状态不符，名额不再释放（R4.2）
-	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 4, true, "", testBase.Add(12*time.Minute)), CodeCancelNotPend)
+	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 4, true, "", testBase.Add(12*time.Minute)), domain.CodeCancelNotPend)
 	if n := reservedCount(t, db, r.SlotID); n != 0 {
 		t.Fatalf("名额不得二次释放，得到 %d", n)
 	}
@@ -164,10 +164,10 @@ func TestReviewRejectRestoresConfirmed(t *testing.T) {
 	if err := ReviewCancel(ctx, db, res.RequestID, 4, false, "时段已排班", testBase.Add(10*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResConfirmed {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResConfirmed {
 		t.Fatalf("拒绝后应恢复已确认，得到 %s", st)
 	}
-	if st, _ := cancelRequestStatus(t, db, res.RequestID); st != model.CancelReqRejected {
+	if st, _ := cancelRequestStatus(t, db, res.RequestID); st != domain.CancelReqRejected {
 		t.Fatalf("申请应为拒绝，得到 %s", st)
 	}
 	if n := reservedCount(t, db, r.SlotID); n != 1 {
@@ -182,7 +182,7 @@ func TestReviewRejectRestoresConfirmed(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM cancel_request WHERE reservation_id=?`, r.ID).Scan(&total); err != nil || total != 2 {
 		t.Fatalf("历史申请应保留 2 条，得到 %d err=%v", total, err)
 	}
-	if st, _ := cancelRequestStatus(t, db, res2.RequestID); st != model.CancelReqPending {
+	if st, _ := cancelRequestStatus(t, db, res2.RequestID); st != domain.CancelReqPending {
 		t.Fatalf("新申请应为待处理，得到 %s", st)
 	}
 }
@@ -199,7 +199,7 @@ func TestCancelRejectedForCheckedInAndCompleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := CancelReservation(ctx, db, r1.ID, 1, "", testBase.Add(3*time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeCancelNotAllow)
+	wantBizCode(t, err, domain.CodeCancelNotAllow)
 
 	// 服务中
 	r2 := confirmedReservation(t, db, time.Hour, 1, 2)
@@ -210,14 +210,14 @@ func TestCancelRejectedForCheckedInAndCompleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = CancelReservation(ctx, db, r2.ID, 1, "", testBase.Add(4*time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeCancelNotAllow)
+	wantBizCode(t, err, domain.CodeCancelNotAllow)
 
 	// 已完成
 	if _, err := CompleteService(ctx, db, r2.ID, 3, testBase.Add(5*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = CancelReservation(ctx, db, r2.ID, 1, "", testBase.Add(6*time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeCancelNotAllow)
+	wantBizCode(t, err, domain.CodeCancelNotAllow)
 
 	// 均不产生退款
 	var n int
@@ -236,12 +236,12 @@ func TestCancelAndReviewPermissions(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	pending := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CancelReservation(ctx, db, pending.ID, 1, "", testBase, 2*time.Hour)
-	wantBizCode(t, err, CodeCancelNotAllow)
+	wantBizCode(t, err, domain.CodeCancelNotAllow)
 
 	// 非本人取消：按不存在处理，不泄露存在性（P2）
 	r := confirmedReservation(t, db, 4*time.Hour, 1, 1)
 	_, err = CancelReservation(ctx, db, r.ID, 2, "冒名取消", testBase, 2*time.Hour)
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 
 	// 审核权限
 	r2 := confirmedReservation(t, db, time.Hour, 2, 3)
@@ -250,18 +250,18 @@ func TestCancelAndReviewPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 前台不能审核（角色不符）
-	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 2, true, "", testBase.Add(2*time.Minute)), CodeRoleForbidden)
+	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 2, true, "", testBase.Add(2*time.Minute)), domain.CodeRoleForbidden)
 	// 别店客服不能审核（门店不符）
-	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 9, true, "", testBase.Add(2*time.Minute)), CodeStoreMismatch)
+	wantBizCode(t, ReviewCancel(ctx, db, res.RequestID, 9, true, "", testBase.Add(2*time.Minute)), domain.CodeStoreMismatch)
 	// 申请不存在
-	wantBizCode(t, ReviewCancel(ctx, db, 9999, 4, true, "", testBase.Add(2*time.Minute)), CodeNotFound)
+	wantBizCode(t, ReviewCancel(ctx, db, 9999, 4, true, "", testBase.Add(2*time.Minute)), domain.CodeNotFound)
 	// 本店客服可处理
 	if err := ReviewCancel(ctx, db, res.RequestID, 4, true, "", testBase.Add(3*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
 	// A12 列表：本店 + 状态过滤
-	list, err := ListCancelRequests(ctx, db, 1, model.CancelReqApproved)
+	list, err := ListCancelRequests(ctx, db, 1, domain.CancelReqApproved)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("应返回 1 条已批准申请，得到 %d err=%v", len(list), err)
 	}

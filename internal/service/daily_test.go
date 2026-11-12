@@ -1,11 +1,11 @@
-package biz
+package service
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 // —— R8.1/R8.2/R8.3 日清：五类计数、三金额、勾稽为 0 ——————————
@@ -81,7 +81,7 @@ func TestDailyReportFiveCategoriesAndReconciliation(t *testing.T) {
 	if err := CancelUnpaid(ctx, db, rF.ID, 2, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if res := payNotify(t, db, "txn-F", pF.OrderNo, true, testBase.Add(3*time.Minute)); res.Result != model.NotifyAnomalyRefund {
+	if res := payNotify(t, db, "txn-F", pF.OrderNo, true, testBase.Add(3*time.Minute)); res.Result != domain.NotifyAnomalyRefund {
 		t.Fatalf("关闭后支付应异常退款，得到 %s", res.Result)
 	}
 

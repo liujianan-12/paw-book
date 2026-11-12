@@ -1,20 +1,21 @@
-package biz
+package service
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // 覆盖错误类型与时钟等基础分支。
 func TestBizErrorAndClock(t *testing.T) {
-	e := errf(CodeNotFound, "预约 %d 不存在", 7)
-	if e.Code != CodeNotFound || e.Error() == "" {
-		t.Fatalf("BizError 字段不符: %+v", e)
+	e := domain.Errf(domain.CodeNotFound, "预约 %d 不存在", 7)
+	if e.Code != domain.CodeNotFound || e.Error() == "" {
+		t.Fatalf("domain.BizError 字段不符: %+v", e)
 	}
-	if RealClock()().IsZero() {
+	if repo.RealClock()().IsZero() {
 		t.Fatal("RealClock 不应返回零值时间")
 	}
 }
@@ -35,11 +36,11 @@ func TestSweepExpiredGlobal(t *testing.T) {
 		t.Fatalf("应清理 2 条，得到 %d err=%v", n, err)
 	}
 	for _, id := range []int64{r1.ID, r2.ID} {
-		if st, ct := reservationStatus(t, db, id); st != model.ResExpired || ct != model.CancelExpired {
+		if st, ct := reservationStatus(t, db, id); st != domain.ResExpired || ct != domain.CancelExpired {
 			t.Fatalf("预约 %d 应为过期/超时，得到 %s/%s", id, st, ct)
 		}
 	}
-	if st, _ := reservationStatus(t, db, r3.ID); st != model.ResPendingPayment {
+	if st, _ := reservationStatus(t, db, r3.ID); st != domain.ResPendingPayment {
 		t.Fatalf("未到期预约不应被清理，得到 %s", st)
 	}
 	if got := reservedCount(t, db, slot1); got != 1 {
@@ -81,7 +82,7 @@ func TestCreateReservationItemUnavailable(t *testing.T) {
 	}
 	_, err := CreateReservation(context.Background(), db,
 		CreateReservationParams{SlotID: 20, UserID: 1, PetID: 1}, testBase, 5*time.Minute)
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 }
 
 // R4 已确认但无成功支付记录时，不能凭空创建退款。
@@ -91,13 +92,13 @@ func TestCancelConfirmedWithoutPayment(t *testing.T) {
 	res, err := db.Exec(`INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 		pay_expire_at, seat_released, version, created_at, updated_at)
 		VALUES(1, ?, 1, 1, 1, 'CONFIRMED', 9900, ?, 0, 0, ?, ?)`,
-		slotID, fmtTime(testBase.Add(5*time.Minute)), fmtTime(testBase), fmtTime(testBase))
+		slotID, repo.FmtTime(testBase.Add(5*time.Minute)), repo.FmtTime(testBase), repo.FmtTime(testBase))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id, _ := res.LastInsertId()
 	_, err = CancelReservation(context.Background(), db, id, 1, "", testBase.Add(time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeStateInvalid)
+	wantBizCode(t, err, domain.CodeStateInvalid)
 }
 
 // 审核时预约状态已被并发改变 → 明确业务码。
@@ -112,13 +113,13 @@ func TestReviewAfterStateChanged(t *testing.T) {
 	if _, err := db.Exec(`UPDATE reservation SET status='CHECKED_IN' WHERE id=?`, r.ID); err != nil {
 		t.Fatal(err)
 	}
-	wantBizCode(t, ReviewCancel(ctx, db, cres.RequestID, 4, true, "", testBase.Add(2*time.Minute)), CodeStateInvalid)
+	wantBizCode(t, ReviewCancel(ctx, db, cres.RequestID, 4, true, "", testBase.Add(2*time.Minute)), domain.CodeStateInvalid)
 }
 
 func TestRefundNotifyNotFound(t *testing.T) {
 	db := testDB(t)
 	_, err := HandleRefundNotify(context.Background(), db, "NO-SUCH-REFUND", true, "", testBase)
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 }
 
 // A16/R4.4：待处理（PENDING）退款也可由客服重试。
@@ -133,7 +134,7 @@ func TestRetryPendingRefund(t *testing.T) {
 	if _, err := RetryRefund(ctx, db, cres.RefundID, 4, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatalf("PENDING 退款应可重试: %v", err)
 	}
-	if _, status, retry, _ := refundOf(t, db, r.ID); status != model.RefundProcessing || retry != 1 {
+	if _, status, retry, _ := refundOf(t, db, r.ID); status != domain.RefundProcessing || retry != 1 {
 		t.Fatalf("应转为 PROCESSING/retry=1，得到 %s/%d", status, retry)
 	}
 }
@@ -147,11 +148,11 @@ func TestPayNotifyFailureAfterSuccessIgnored(t *testing.T) {
 	payNotify(t, db, "txn-ok", p.OrderNo, true, testBase.Add(time.Minute))
 
 	res := payNotify(t, db, "txn-fail-late", p.OrderNo, false, testBase.Add(2*time.Minute))
-	if res.Result != model.NotifyRejected {
+	if res.Result != domain.NotifyRejected {
 		t.Fatalf("失败通知应记录 REJECTED，得到 %s", res.Result)
 	}
 	var status string
-	if err := db.QueryRow(`SELECT status FROM payment WHERE id=?`, p.ID).Scan(&status); err != nil || status != model.PaySuccess {
+	if err := db.QueryRow(`SELECT status FROM payment WHERE id=?`, p.ID).Scan(&status); err != nil || status != domain.PaySuccess {
 		t.Fatalf("已成功支付不得被失败回调改写，得到 %s err=%v", status, err)
 	}
 }
@@ -159,15 +160,15 @@ func TestPayNotifyFailureAfterSuccessIgnored(t *testing.T) {
 func TestGetReservationNotFound(t *testing.T) {
 	db := testDB(t)
 	_, err := GetReservation(context.Background(), db, 9999, 1)
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 }
 
 // beginTx 对不支持事务的连接返回明确业务错误，而不是 panic。
-type noTxConn struct{ DBTX }
+type noTxConn struct{ repo.DBTX }
 
 func TestBeginTxUnsupported(t *testing.T) {
-	_, err := beginTx(context.Background(), noTxConn{})
-	wantBizCode(t, err, CodeInvalidParam)
+	_, err := repo.BeginTx(context.Background(), noTxConn{})
+	wantBizCode(t, err, domain.CodeInvalidParam)
 }
 
 // A7：详情视图应带出取消申请与退款单。
@@ -186,10 +187,10 @@ func TestGetReservationWithCancelAndRefund(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.CancelReqID != cres.RequestID || d.CancelReqStat != model.CancelReqApproved || d.CancelReason != "宠物生病" {
+	if d.CancelReqID != cres.RequestID || d.CancelReqStat != domain.CancelReqApproved || d.CancelReason != "宠物生病" {
 		t.Fatalf("详情应带出取消申请: %+v", d)
 	}
-	if d.RefundID == 0 || d.RefundStatus != model.RefundPending {
+	if d.RefundID == 0 || d.RefundStatus != domain.RefundPending {
 		t.Fatalf("详情应带出退款单: %+v", d)
 	}
 }
@@ -218,11 +219,11 @@ func TestEnsureRefundIsUniquePerReservation(t *testing.T) {
 		Scan(&payID, &amount); err != nil {
 		t.Fatal(err)
 	}
-	id1, err := ensureRefund(ctx, db, r.ID, payID, amount, model.ReasonAutoCancel, testBase)
+	id1, err := ensureRefund(ctx, db, r.ID, payID, amount, domain.ReasonAutoCancel, testBase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	id2, err := ensureRefund(ctx, db, r.ID, payID, amount, model.ReasonCSApproved, testBase)
+	id2, err := ensureRefund(ctx, db, r.ID, payID, amount, domain.ReasonCSApproved, testBase)
 	if err != nil || id2 != id1 {
 		t.Fatalf("同一预约退款单应复用: id1=%d id2=%d err=%v", id1, id2, err)
 	}
@@ -244,7 +245,7 @@ func TestRefundNotifyEmptyReasonUsesChannelTimeout(t *testing.T) {
 	if _, err := HandleRefundNotify(ctx, db, refundNoByID(t, db, cres.RefundID), false, "", testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if _, status, _, lastErr := refundOf(t, db, r.ID); status != model.RefundFailed || lastErr != model.ReasonChannelError {
+	if _, status, _, lastErr := refundOf(t, db, r.ID); status != domain.RefundFailed || lastErr != domain.ReasonChannelError {
 		t.Fatalf("应记 CHANNEL_TIMEOUT: %s/%s", status, lastErr)
 	}
 }
@@ -255,11 +256,11 @@ func TestCreatePaymentWhenAlreadySucceeded(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	if _, err := db.Exec(`INSERT INTO payment(reservation_id, order_no, amount_cents, channel, status, created_at)
-		VALUES(?, 'LEGACY-OK', 9900, 'mock', 'SUCCESS', ?)`, r.ID, fmtTime(testBase)); err != nil {
+		VALUES(?, 'LEGACY-OK', 9900, 'mock', 'SUCCESS', ?)`, r.ID, repo.FmtTime(testBase)); err != nil {
 		t.Fatal(err)
 	}
 	_, err := CreatePayment(context.Background(), db, r.ID, 1, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodePaymentNotPend)
+	wantBizCode(t, err, domain.CodePaymentNotPend)
 }
 
 // R5.1：过期/未到店预约不得核销；R5.2：顺序不能越级。
@@ -268,17 +269,17 @@ func TestCheckInAndServiceIllegalStates(t *testing.T) {
 	ctx := context.Background()
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 
-	for _, st := range []string{model.ResExpired, model.ResNoShow} {
+	for _, st := range []string{domain.ResExpired, domain.ResNoShow} {
 		res, err := db.Exec(`INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 			pay_expire_at, seat_released, version, created_at, updated_at)
 			VALUES(1, ?, 1, 1, 1, ?, 9900, ?, 1, 0, ?, ?)`,
-			slotID, st, fmtTime(testBase.Add(5*time.Minute)), fmtTime(testBase), fmtTime(testBase))
+			slotID, st, repo.FmtTime(testBase.Add(5*time.Minute)), repo.FmtTime(testBase), repo.FmtTime(testBase))
 		if err != nil {
 			t.Fatal(err)
 		}
 		id, _ := res.LastInsertId()
 		_, err = CheckIn(ctx, db, id, 2, testBase.Add(time.Minute))
-		wantBizCode(t, err, CodeCheckinNotAllow)
+		wantBizCode(t, err, domain.CodeCheckinNotAllow)
 	}
 
 	r := confirmedReservation(t, db, 2*time.Hour, 2, 3)
@@ -287,7 +288,7 @@ func TestCheckInAndServiceIllegalStates(t *testing.T) {
 	}
 	// 未开始直接完成
 	_, err := CompleteService(ctx, db, r.ID, 3, testBase.Add(3*time.Minute))
-	wantBizCode(t, err, CodeServiceNotStart)
+	wantBizCode(t, err, domain.CodeServiceNotStart)
 	// 完成后重复开始也幂等
 	if _, err := StartService(ctx, db, r.ID, 3, testBase.Add(4*time.Minute)); err != nil {
 		t.Fatal(err)
@@ -316,7 +317,7 @@ func TestIsConstraintViolation(t *testing.T) {
 		{errString("foreign key constraint failed"), "reservation", nil, false},
 	}
 	for i, c := range cases {
-		if got := isConstraintViolation(c.err, c.table, c.cols...); got != c.want {
+		if got := repo.IsConstraintViolation(c.err, c.table, c.cols...); got != c.want {
 			t.Errorf("case %d: want %v got %v", i, c.want, got)
 		}
 	}
@@ -361,13 +362,13 @@ func TestInternalHelpersErrorPaths(t *testing.T) {
 	if _, err := expireRowsTx(ctx, closed, " AND id=?", testBase, []any{int64(1)}); err == nil {
 		t.Error("连接不可用时 expireRowsTx 应返回错误")
 	}
-	if _, err := ensureRefund(ctx, closed, 1, 1, 9900, model.ReasonAutoCancel, testBase); err == nil {
+	if _, err := ensureRefund(ctx, closed, 1, 1, 9900, domain.ReasonAutoCancel, testBase); err == nil {
 		t.Error("连接不可用时 ensureRefund 应返回错误")
 	}
 	if _, err := hasPendingCancel(ctx, closed, 1); err == nil {
 		t.Error("连接不可用时 hasPendingCancel 应返回错误")
 	}
-	if _, err := refundOfReservation(ctx, closed, 1, model.ReasonAutoCancel, testBase); err == nil {
+	if _, err := refundOfReservation(ctx, closed, 1, domain.ReasonAutoCancel, testBase); err == nil {
 		t.Error("连接不可用时 refundOfReservation 应返回错误")
 	}
 }
@@ -387,7 +388,7 @@ func TestPayNotifyPaymentUpdateFailureRollsBack(t *testing.T) {
 	if err == nil {
 		t.Fatal("支付单更新失败时应返回错误")
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResPendingPayment {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResPendingPayment {
 		t.Fatalf("事务应回滚，预约仍为待支付，得到 %s", st)
 	}
 }
@@ -403,7 +404,7 @@ func TestMarkNoShowInvalidSlotTime(t *testing.T) {
 	res, err := db.Exec(`INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 		pay_expire_at, seat_released, version, created_at, updated_at)
 		VALUES(1, 80, 1, 1, 1, 'CONFIRMED', 9900, ?, 0, 0, ?, ?)`,
-		fmtTime(testBase.Add(5*time.Minute)), fmtTime(testBase), fmtTime(testBase))
+		repo.FmtTime(testBase.Add(5*time.Minute)), repo.FmtTime(testBase), repo.FmtTime(testBase))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +423,7 @@ func TestCancelRequestConstraintFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := CancelReservation(context.Background(), db, r.ID, 1, "临时有事", testBase.Add(time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeCancelAlreadyPending)
+	wantBizCode(t, err, domain.CodeCancelAlreadyPending)
 }
 
 // 退款单写入失败：自动取消必须整体回滚，不能出现“已取消却没有退款单”。
@@ -437,7 +438,7 @@ func TestRefundInsertFailureRollsBack(t *testing.T) {
 	if _, err := CancelReservation(ctx, db, r.ID, 1, "", testBase.Add(time.Minute), 2*time.Hour); err == nil {
 		t.Fatal("退款单写入失败时应返回错误")
 	}
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResConfirmed {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResConfirmed {
 		t.Fatalf("事务应回滚，预约仍为已确认，得到 %s", st)
 	}
 	if n := reservedCount(t, db, r.SlotID); n != 1 {
@@ -486,7 +487,7 @@ func TestCreatePaymentInvalidExpireTime(t *testing.T) {
 	res, err := db.Exec(`INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 		pay_expire_at, seat_released, version, created_at, updated_at)
 		VALUES(1, ?, 1, 1, 1, 'PENDING_PAYMENT', 9900, 'zzz', 0, 0, ?, ?)`,
-		slotID, fmtTime(testBase), fmtTime(testBase))
+		slotID, repo.FmtTime(testBase), repo.FmtTime(testBase))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,13 +502,13 @@ func TestCreatePaymentInvalidExpireTime(t *testing.T) {
 func TestCancelInvalidSlotStart(t *testing.T) {
 	db := testDB(t)
 	if _, err := db.Exec(`INSERT INTO slot(id, store_id, item_id, start_at, end_at, capacity, reserved_count, created_by, created_at)
-		VALUES(81, 1, 1, 'zzz', 'zzzz', 3, 1, 1, ?)`, fmtTime(testBase)); err != nil {
+		VALUES(81, 1, 1, 'zzz', 'zzzz', 3, 1, 1, ?)`, repo.FmtTime(testBase)); err != nil {
 		t.Fatal(err)
 	}
 	res, err := db.Exec(`INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
 		pay_expire_at, seat_released, version, created_at, updated_at)
 		VALUES(1, 81, 1, 1, 1, 'CONFIRMED', 9900, ?, 0, 0, ?, ?)`,
-		fmtTime(testBase.Add(5*time.Minute)), fmtTime(testBase), fmtTime(testBase))
+		repo.FmtTime(testBase.Add(5*time.Minute)), repo.FmtTime(testBase), repo.FmtTime(testBase))
 	if err != nil {
 		t.Fatal(err)
 	}

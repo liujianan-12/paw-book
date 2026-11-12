@@ -1,10 +1,11 @@
-package biz
+package service
 
 import (
 	"context"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // DayReservation 日清明细行（可下钻到预约/退款单据）。
@@ -53,7 +54,7 @@ type DailyReport struct {
 }
 
 // GetDailyReport 汇总门店某一天（按时段开始时间归属，A1）的经营数据。
-func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) (*DailyReport, error) {
+func GetDailyReport(ctx context.Context, db repo.DBTX, storeID int64, day time.Time) (*DailyReport, error) {
 	// 过期未支付预约先释放名额，保证日清与名额账一致（R2.2/I1）
 	if _, err := SweepExpired(ctx, db, day); err != nil {
 		return nil, err
@@ -66,7 +67,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 	// 1. 当日时段
 	slotRows, err := db.QueryContext(ctx,
 		`SELECT id, start_at, end_at FROM slot WHERE store_id=? AND start_at>=? AND start_at<? ORDER BY start_at`,
-		storeID, fmtTime(dayStart), fmtTime(dayEnd))
+		storeID, repo.FmtTime(dayStart), repo.FmtTime(dayEnd))
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 		 JOIN pet p ON p.id=r.pet_id
 		 JOIN slot s ON s.id=r.slot_id
 		 WHERE r.store_id=? AND s.start_at>=? AND s.start_at<? ORDER BY r.id`,
-		storeID, fmtTime(dayStart), fmtTime(dayEnd))
+		storeID, repo.FmtTime(dayStart), repo.FmtTime(dayEnd))
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 		 JOIN reservation r ON r.id=f.reservation_id
 		 JOIN slot s ON s.id=r.slot_id
 		 WHERE r.store_id=? AND s.start_at>=? AND s.start_at<?`,
-		storeID, fmtTime(dayStart), fmtTime(dayEnd))
+		storeID, repo.FmtTime(dayStart), repo.FmtTime(dayEnd))
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 			all[i].RefundID = refundID
 			all[i].RefundStatus = status
 			all[i].RefundCents = amount
-			all[i].RefundFailed = status == model.RefundFailed
+			all[i].RefundFailed = status == domain.RefundFailed
 		}
 	}
 	refRows.Close()
@@ -152,7 +153,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 		 JOIN reservation r ON r.id=p.reservation_id
 		 JOIN slot s ON s.id=r.slot_id
 		 WHERE r.store_id=? AND p.status=? AND s.start_at>=? AND s.start_at<?`,
-		storeID, model.PaySuccess, fmtTime(dayStart), fmtTime(dayEnd)).Scan(&rep.CollectedCents); err != nil {
+		storeID, domain.PaySuccess, repo.FmtTime(dayStart), repo.FmtTime(dayEnd)).Scan(&rep.CollectedCents); err != nil {
 		return nil, err
 	}
 	if err := db.QueryRowContext(ctx,
@@ -160,7 +161,7 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 		 JOIN reservation r ON r.id=a.reservation_id
 		 JOIN slot s ON s.id=r.slot_id
 		 WHERE r.store_id=? AND s.start_at>=? AND s.start_at<?`,
-		storeID, fmtTime(dayStart), fmtTime(dayEnd)).Scan(&rep.PaymentExceptionCount); err != nil {
+		storeID, repo.FmtTime(dayStart), repo.FmtTime(dayEnd)).Scan(&rep.PaymentExceptionCount); err != nil {
 		return nil, err
 	}
 
@@ -171,30 +172,30 @@ func GetDailyReport(ctx context.Context, db DBTX, storeID int64, day time.Time) 
 		if ok {
 			s := &rep.Slots[idx]
 			s.Reservations = append(s.Reservations, *dr)
-			if model.OccupiesSlot(dr.Status) {
+			if domain.OccupiesSlot(dr.Status) {
 				s.ActiveCount++
 			}
 			switch dr.Status {
-			case model.ResCompleted:
+			case domain.ResCompleted:
 				s.Completed++
-			case model.ResCancelled:
+			case domain.ResCancelled:
 				s.Cancelled++
-			case model.ResNoShow:
+			case domain.ResNoShow:
 				s.NoShow++
 			}
 		}
 
 		switch dr.Status {
-		case model.ResCompleted:
+		case domain.ResCompleted:
 			rep.CompletedIncomeCents += dr.AmountCents
-		case model.ResNoShow:
+		case domain.ResNoShow:
 			rep.NoShowHeldCents += dr.AmountCents
-		case model.ResConfirmed, model.ResCancellationReview, model.ResCheckedIn, model.ResInService:
+		case domain.ResConfirmed, domain.ResCancellationReview, domain.ResCheckedIn, domain.ResInService:
 			rep.ActiveHeldCents += dr.AmountCents
 		}
 
 		if dr.RefundStatus != "" {
-			if dr.RefundStatus == model.RefundSuccess {
+			if dr.RefundStatus == domain.RefundSuccess {
 				rep.RefundedCents += dr.RefundCents
 			} else {
 				rep.RefundPendingCents += dr.RefundCents

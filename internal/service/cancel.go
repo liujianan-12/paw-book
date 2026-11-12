@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
+	"paw-book/internal/repo"
 )
 
 // CancelResult 取消处理结果。
@@ -18,8 +19,8 @@ type CancelResult struct {
 }
 
 // CancelReservation 已确认预约取消（R3.1/R3.2/R3.3）。
-func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64, reason string, now time.Time, cutoff time.Duration) (*CancelResult, error) {
-	tx, err := beginTx(ctx, db)
+func CancelReservation(ctx context.Context, db repo.DBTX, reservationID, userID int64, reason string, now time.Time, cutoff time.Duration) (*CancelResult, error) {
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -31,26 +32,26 @@ func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64
 		`SELECT r.user_id, r.slot_id, r.status, s.start_at FROM reservation r JOIN slot s ON s.id=r.slot_id WHERE r.id=?`,
 		reservationID).Scan(&ownerID, &slotID, &status, &startAt)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && ownerID != userID) {
-		return nil, errf(CodeNotFound, "预约不存在")
+		return nil, domain.Errf(domain.CodeNotFound, "预约不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 	// A6/A10：已有待审核申请时重复提交，返回明确业务码而不是“状态不允许”
-	if status == model.ResCancellationReview {
+	if status == domain.ResCancellationReview {
 		pending, perr := hasPendingCancel(ctx, tx, reservationID)
 		if perr != nil {
 			return nil, perr
 		}
 		if pending {
-			return nil, errf(CodeCancelAlreadyPending, "该预约已有待处理的取消申请")
+			return nil, domain.Errf(domain.CodeCancelAlreadyPending, "该预约已有待处理的取消申请")
 		}
 	}
 	// R6.2：已核销/服务中/已完成/已取消/过期/未到店均不可取消
-	if status != model.ResConfirmed {
-		return nil, errf(CodeCancelNotAllow, "仅已确认预约可取消（当前 %s）", status)
+	if status != domain.ResConfirmed {
+		return nil, domain.Errf(domain.CodeCancelNotAllow, "仅已确认预约可取消（当前 %s）", status)
 	}
-	start, err := parseTime(startAt)
+	start, err := repo.ParseTime(startAt)
 	if err != nil {
 		return nil, err
 	}
@@ -61,22 +62,22 @@ func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64
 		res, err := tx.ExecContext(ctx,
 			`UPDATE reservation SET status=?, cancel_type=?, cancelled_at=?, updated_at=?, seat_released=1
 			 WHERE id=? AND status=? AND seat_released=0`,
-			model.ResCancelled, model.CancelAutoBefore2H, fmtTime(now), fmtTime(now), reservationID, model.ResConfirmed)
+			domain.ResCancelled, domain.CancelAutoBefore2H, repo.FmtTime(now), repo.FmtTime(now), reservationID, domain.ResConfirmed)
 		if err != nil {
 			return nil, err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return nil, errf(CodeStateInvalid, "预约状态已变化，取消失败")
+			return nil, domain.Errf(domain.CodeStateInvalid, "预约状态已变化，取消失败")
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE slot SET reserved_count=reserved_count-1 WHERE id=? AND reserved_count>0`, slotID); err != nil {
 			return nil, err
 		}
-		refundID, err := refundOfReservation(ctx, tx, reservationID, model.ReasonAutoCancel, now)
+		refundID, err := refundOfReservation(ctx, tx, reservationID, domain.ReasonAutoCancel, now)
 		if err != nil {
 			return nil, err
 		}
-		if err := audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_AUTO", "reservation", reservationID, "ok", "", now); err != nil {
+		if err := repo.Audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_AUTO", "reservation", reservationID, "ok", "", now); err != nil {
 			return nil, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -87,14 +88,14 @@ func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64
 
 	// R3.2：<2h 必须有原因，进入取消审核（名额保持）
 	if reason == "" {
-		return nil, errf(CodeCancelReason, "距开始不足 %v，取消须填写原因由客服审核", cutoff)
+		return nil, domain.Errf(domain.CodeCancelReason, "距开始不足 %v，取消须填写原因由客服审核", cutoff)
 	}
 	ins, err := tx.ExecContext(ctx,
 		`INSERT INTO cancel_request(reservation_id, reason, status, requested_at) VALUES(?,?,?,?)`,
-		reservationID, reason, model.CancelReqPending, fmtTime(now))
+		reservationID, reason, domain.CancelReqPending, repo.FmtTime(now))
 	if err != nil {
-		if isConstraintViolation(err, "cancel_request", "reservation_id") || strings.Contains(err.Error(), "uk_cancel_res_pending") {
-			return nil, errf(CodeCancelAlreadyPending, "该预约已有待处理的取消申请")
+		if repo.IsConstraintViolation(err, "cancel_request", "reservation_id") || strings.Contains(err.Error(), "uk_cancel_res_pending") {
+			return nil, domain.Errf(domain.CodeCancelAlreadyPending, "该预约已有待处理的取消申请")
 		}
 		return nil, err
 	}
@@ -104,14 +105,14 @@ func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64
 	}
 	res, err := tx.ExecContext(ctx,
 		`UPDATE reservation SET status=?, cancel_type=NULL, updated_at=? WHERE id=? AND status=?`,
-		model.ResCancellationReview, fmtTime(now), reservationID, model.ResConfirmed)
+		domain.ResCancellationReview, repo.FmtTime(now), reservationID, domain.ResConfirmed)
 	if err != nil {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, errf(CodeStateInvalid, "预约状态已变化，申请失败")
+		return nil, domain.Errf(domain.CodeStateInvalid, "预约状态已变化，申请失败")
 	}
-	if err := audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_REQUEST", "reservation", reservationID, "ok", reason, now); err != nil {
+	if err := repo.Audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_REQUEST", "reservation", reservationID, "ok", reason, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -121,13 +122,13 @@ func CancelReservation(ctx context.Context, db DBTX, reservationID, userID int64
 }
 
 // ReviewCancel 客服审核取消申请（R4.1/R4.2/R3.3）。
-func ReviewCancel(ctx context.Context, db DBTX, requestID, employeeID int64, approve bool, note string, now time.Time) error {
-	storeID, err := checkStaff(ctx, db, employeeID, model.RoleCS)
+func ReviewCancel(ctx context.Context, db repo.DBTX, requestID, employeeID int64, approve bool, note string, now time.Time) error {
+	storeID, err := repo.CheckStaff(ctx, db, employeeID, domain.RoleCS)
 	if err != nil {
 		return err
 	}
 
-	tx, err := beginTx(ctx, db)
+	tx, err := repo.BeginTx(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -140,28 +141,28 @@ func ReviewCancel(ctx context.Context, db DBTX, requestID, employeeID int64, app
 		 FROM cancel_request c JOIN reservation r ON r.id=c.reservation_id WHERE c.id=?`,
 		requestID).Scan(&resID, &reqStatus, &resStore, &resStatus)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errf(CodeNotFound, "取消申请不存在")
+		return domain.Errf(domain.CodeNotFound, "取消申请不存在")
 	}
 	if err != nil {
 		return err
 	}
 	if resStore != storeID {
-		return errf(CodeStoreMismatch, "非本店员工无权操作本店预约")
+		return domain.Errf(domain.CodeStoreMismatch, "非本店员工无权操作本店预约")
 	}
-	if reqStatus != model.CancelReqPending {
-		return errf(CodeCancelNotPend, "该申请已处理（%s）", reqStatus)
+	if reqStatus != domain.CancelReqPending {
+		return domain.Errf(domain.CodeCancelNotPend, "该申请已处理（%s）", reqStatus)
 	}
-	if resStatus != model.ResCancellationReview {
-		return errf(CodeStateInvalid, "预约状态已变化（%s）", resStatus)
+	if resStatus != domain.ResCancellationReview {
+		return domain.Errf(domain.CodeStateInvalid, "预约状态已变化（%s）", resStatus)
 	}
 
-	decision := model.CancelReqRejected
+	decision := domain.CancelReqRejected
 	if approve {
-		decision = model.CancelReqApproved
+		decision = domain.CancelReqApproved
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE cancel_request SET status=?, decided_by=?, decided_at=?, decision_note=? WHERE id=?`,
-		decision, employeeID, fmtTime(now), note, requestID); err != nil {
+		decision, employeeID, repo.FmtTime(now), note, requestID); err != nil {
 		return err
 	}
 
@@ -170,12 +171,12 @@ func ReviewCancel(ctx context.Context, db DBTX, requestID, employeeID int64, app
 		res, err := tx.ExecContext(ctx,
 			`UPDATE reservation SET status=?, cancel_type=?, cancelled_at=?, updated_at=?, seat_released=1
 			 WHERE id=? AND status=? AND seat_released=0`,
-			model.ResCancelled, model.CancelCSApproved, fmtTime(now), fmtTime(now), resID, model.ResCancellationReview)
+			domain.ResCancelled, domain.CancelCSApproved, repo.FmtTime(now), repo.FmtTime(now), resID, domain.ResCancellationReview)
 		if err != nil {
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return errf(CodeStateInvalid, "预约状态已变化，批准失败")
+			return domain.Errf(domain.CodeStateInvalid, "预约状态已变化，批准失败")
 		}
 		var slotID int64
 		if err := tx.QueryRowContext(ctx, `SELECT slot_id FROM reservation WHERE id=?`, resID).Scan(&slotID); err != nil {
@@ -185,32 +186,32 @@ func ReviewCancel(ctx context.Context, db DBTX, requestID, employeeID int64, app
 			`UPDATE slot SET reserved_count=reserved_count-1 WHERE id=? AND reserved_count>0`, slotID); err != nil {
 			return err
 		}
-		if _, err := refundOfReservation(ctx, tx, resID, model.ReasonCSApproved, now); err != nil {
+		if _, err := refundOfReservation(ctx, tx, resID, domain.ReasonCSApproved, now); err != nil {
 			return err
 		}
 	} else {
 		// R3.3：拒绝 → 恢复已确认，名额不变
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE reservation SET status=?, updated_at=? WHERE id=? AND status=?`,
-			model.ResConfirmed, fmtTime(now), resID, model.ResCancellationReview); err != nil {
+			domain.ResConfirmed, repo.FmtTime(now), resID, domain.ResCancellationReview); err != nil {
 			return err
 		}
 	}
 	result := map[bool]string{true: "APPROVED", false: "REJECTED"}[approve]
-	if err := audit(ctx, tx, employeeID, model.RoleCS, storeID, "CANCEL_REVIEW", "cancel_request", requestID, result, note, now); err != nil {
+	if err := repo.Audit(ctx, tx, employeeID, domain.RoleCS, storeID, "CANCEL_REVIEW", "cancel_request", requestID, result, note, now); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 // refundOfReservation 取该预约最近一笔成功支付，创建/复用退款单（A4 统一通道）。
-func refundOfReservation(ctx context.Context, db DBTX, reservationID int64, reason string, now time.Time) (int64, error) {
+func refundOfReservation(ctx context.Context, db repo.DBTX, reservationID int64, reason string, now time.Time) (int64, error) {
 	var payID, amount int64
 	err := db.QueryRowContext(ctx,
 		`SELECT id, amount_cents FROM payment WHERE reservation_id=? AND status=?`,
-		reservationID, model.PaySuccess).Scan(&payID, &amount)
+		reservationID, domain.PaySuccess).Scan(&payID, &amount)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errf(CodeStateInvalid, "预约无成功支付记录，无法创建退款")
+		return 0, domain.Errf(domain.CodeStateInvalid, "预约无成功支付记录，无法创建退款")
 	}
 	if err != nil {
 		return 0, err
@@ -231,7 +232,7 @@ type CancelRequestView struct {
 }
 
 // ListCancelRequests 查询本店取消申请（status 为空表示全部）。
-func ListCancelRequests(ctx context.Context, db DBTX, storeID int64, status string) ([]CancelRequestView, error) {
+func ListCancelRequests(ctx context.Context, db repo.DBTX, storeID int64, status string) ([]CancelRequestView, error) {
 	q := `
 		SELECT c.id, c.reservation_id, c.reason, c.status, c.requested_at, p.name, u.name, s.start_at
 		FROM cancel_request c

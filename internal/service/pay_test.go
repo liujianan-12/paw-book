@@ -1,4 +1,4 @@
-package biz
+package service
 
 import (
 	"context"
@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"paw-book/internal/model"
+	"paw-book/internal/domain"
 )
 
 // —— 测试辅助 ——————————————————————————————
 
-func mustCreatePayment(t *testing.T, db *sql.DB, reservationID, userID int64, now time.Time) *model.Payment {
+func mustCreatePayment(t *testing.T, db *sql.DB, reservationID, userID int64, now time.Time) *domain.Payment {
 	t.Helper()
 	p, err := CreatePayment(context.Background(), db, reservationID, userID, now)
 	if err != nil {
@@ -30,13 +30,13 @@ func payNotify(t *testing.T, db *sql.DB, txnID, orderNo string, success bool, no
 }
 
 // confirmedReservation 预置一个"已确认（已支付）"预约，返回预约。
-func confirmedReservation(t *testing.T, db *sql.DB, slotStartIn time.Duration, userID, petID int64) *model.Reservation {
+func confirmedReservation(t *testing.T, db *sql.DB, slotStartIn time.Duration, userID, petID int64) *domain.Reservation {
 	t.Helper()
 	slotID := mustCreateSlot(t, db, slotStartIn, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, userID, petID, testBase)
 	p := mustCreatePayment(t, db, r.ID, userID, testBase)
 	payNotify(t, db, "txn-"+p.OrderNo, p.OrderNo, true, testBase.Add(time.Minute))
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResConfirmed {
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResConfirmed {
 		t.Fatalf("前置失败：预约应已确认，得到 %s", st)
 	}
 	return r
@@ -46,7 +46,7 @@ func paymentSuccessCount(t *testing.T, db *sql.DB, reservationID int64) int {
 	t.Helper()
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM payment WHERE reservation_id=? AND status=?`,
-		reservationID, model.PaySuccess).Scan(&n); err != nil {
+		reservationID, domain.PaySuccess).Scan(&n); err != nil {
 		t.Fatalf("统计成功支付: %v", err)
 	}
 	return n
@@ -60,7 +60,7 @@ func TestCreatePaymentOK(t *testing.T) {
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 
 	p := mustCreatePayment(t, db, r.ID, 1, testBase.Add(time.Minute))
-	if p.Status != model.PayInit || p.AmountCents != 9900 || p.OrderNo == "" || p.Attempt != 1 {
+	if p.Status != domain.PayInit || p.AmountCents != 9900 || p.OrderNo == "" || p.Attempt != 1 {
 		t.Fatalf("支付单字段不符: %+v", p)
 	}
 	if p.ReservationID != r.ID {
@@ -73,7 +73,7 @@ func TestCreatePaymentWrongOwner(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CreatePayment(context.Background(), db, r.ID, 2, testBase)
-	wantBizCode(t, err, CodeNotFound)
+	wantBizCode(t, err, domain.CodeNotFound)
 }
 
 func TestCreatePaymentAfterDeadlineRejected(t *testing.T) {
@@ -81,8 +81,8 @@ func TestCreatePaymentAfterDeadlineRejected(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CreatePayment(context.Background(), db, r.ID, 1, testBase.Add(6*time.Minute))
-	wantBizCode(t, err, CodePaymentExpired)
-	if st, _ := reservationStatus(t, db, r.ID); st != model.ResExpired {
+	wantBizCode(t, err, domain.CodePaymentExpired)
+	if st, _ := reservationStatus(t, db, r.ID); st != domain.ResExpired {
 		t.Fatalf("超时支付应把占位清理为过期，得到 %s", st)
 	}
 }
@@ -91,7 +91,7 @@ func TestCreatePaymentNotPending(t *testing.T) {
 	db := testDB(t)
 	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
 	_, err := CreatePayment(context.Background(), db, r.ID, 1, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodePaymentNotPend)
+	wantBizCode(t, err, domain.CodePaymentNotPend)
 }
 
 // —— R2.4/R2.5 回调确认、失败保持与幂等 ————————————
@@ -103,10 +103,10 @@ func TestPayNotifyConfirmsReservation(t *testing.T) {
 	p := mustCreatePayment(t, db, r.ID, 1, testBase)
 
 	res := payNotify(t, db, "txn-1", p.OrderNo, true, testBase.Add(time.Minute))
-	if res.Result != model.NotifyConfirmed {
+	if res.Result != domain.NotifyConfirmed {
 		t.Fatalf("首次成功回调应确认预约，得到 %s", res.Result)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResConfirmed {
+	if s, _ := reservationStatus(t, db, r.ID); s != domain.ResConfirmed {
 		t.Fatalf("预约应转为已确认，得到 %s", s)
 	}
 	var paidAt sql.NullString
@@ -122,10 +122,10 @@ func TestPayNotifyFailedThenRetrySucceeds(t *testing.T) {
 	p1 := mustCreatePayment(t, db, r.ID, 1, testBase)
 
 	fail := payNotify(t, db, "txn-fail-1", p1.OrderNo, false, testBase.Add(time.Minute))
-	if fail.Result != model.NotifyRejected {
+	if fail.Result != domain.NotifyRejected {
 		t.Fatalf("失败回调结果应为 REJECTED，得到 %s", fail.Result)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResPendingPayment {
+	if s, _ := reservationStatus(t, db, r.ID); s != domain.ResPendingPayment {
 		t.Fatalf("失败回调后预约应保持待支付，得到 %s", s)
 	}
 
@@ -135,7 +135,7 @@ func TestPayNotifyFailedThenRetrySucceeds(t *testing.T) {
 		t.Fatalf("重试应生成新流水/新单号/attempt=2: %+v", p2)
 	}
 	res := payNotify(t, db, "txn-ok-2", p2.OrderNo, true, testBase.Add(3*time.Minute))
-	if res.Result != model.NotifyConfirmed {
+	if res.Result != domain.NotifyConfirmed {
 		t.Fatalf("重试成功应确认，得到 %s", res.Result)
 	}
 	if n := paymentSuccessCount(t, db, r.ID); n != 1 {
@@ -151,10 +151,10 @@ func TestPayNotifyDuplicateIsIdempotent(t *testing.T) {
 
 	payNotify(t, db, "txn-dup", p.OrderNo, true, testBase.Add(time.Minute))
 	second := payNotify(t, db, "txn-dup", p.OrderNo, true, testBase.Add(2*time.Minute))
-	if second.Result != model.NotifyDuplicate {
+	if second.Result != domain.NotifyDuplicate {
 		t.Fatalf("重复流水应幂等忽略，得到 %s", second.Result)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResConfirmed {
+	if s, _ := reservationStatus(t, db, r.ID); s != domain.ResConfirmed {
 		t.Fatalf("重复通知不得改变状态，得到 %s", s)
 	}
 	var n int
@@ -169,7 +169,7 @@ func TestPayNotifyDuplicateIsIdempotent(t *testing.T) {
 func TestPayNotifyUnknownOrder(t *testing.T) {
 	db := testDB(t)
 	_, err := HandlePayNotify(context.Background(), db, "txn-x", "NO-SUCH-ORDER", true, testBase)
-	wantBizCode(t, err, CodePaymentNotFound)
+	wantBizCode(t, err, domain.CodePaymentNotFound)
 }
 
 // —— R2.6 关闭后支付：异常 + 退款、状态不变 ————————————
@@ -185,10 +185,10 @@ func TestPayNotifyAfterCancelMakesAnomalyAndRefund(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := payNotify(t, db, "txn-late-cancel", p.OrderNo, true, testBase.Add(2*time.Minute))
-	if res.Result != model.NotifyAnomalyRefund || res.RefundID == 0 {
+	if res.Result != domain.NotifyAnomalyRefund || res.RefundID == 0 {
 		t.Fatalf("关闭后支付应异常退款: %+v", res)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResCancelled {
+	if s, _ := reservationStatus(t, db, r.ID); s != domain.ResCancelled {
 		t.Fatalf("预约必须保持已取消，得到 %s", s)
 	}
 	var n int
@@ -196,7 +196,7 @@ func TestPayNotifyAfterCancelMakesAnomalyAndRefund(t *testing.T) {
 		t.Fatalf("支付异常应恰有 1 条，得到 %d err=%v", n, err)
 	}
 	id, status, retry, _ := refundOf(t, db, r.ID)
-	if id != res.RefundID || status != model.RefundPending || retry != 0 {
+	if id != res.RefundID || status != domain.RefundPending || retry != 0 {
 		t.Fatalf("退款单应为待处理且未重试: id=%d status=%s retry=%d", id, status, retry)
 	}
 }
@@ -209,13 +209,13 @@ func TestPayNotifyLateSuccessAfterDeadline(t *testing.T) {
 
 	// 06:08 渠道才回调成功：先过期占位，再走异常退款
 	res := payNotify(t, db, "txn-late", p.OrderNo, true, testBase.Add(8*time.Minute))
-	if res.Result != model.NotifyAnomalyRefund {
+	if res.Result != domain.NotifyAnomalyRefund {
 		t.Fatalf("超时关闭后的迟到成功应走异常退款: %s", res.Result)
 	}
-	if st, ct := reservationStatus(t, db, r.ID); st != model.ResExpired || ct != model.CancelExpired {
+	if st, ct := reservationStatus(t, db, r.ID); st != domain.ResExpired || ct != domain.CancelExpired {
 		t.Fatalf("预约应为超时过期，得到 %s/%s", st, ct)
 	}
-	if id, status, _, _ := refundOf(t, db, r.ID); id == 0 || status != model.RefundPending {
+	if id, status, _, _ := refundOf(t, db, r.ID); id == 0 || status != domain.RefundPending {
 		t.Fatalf("应生成待处理退款单，得到 id=%d status=%s", id, status)
 	}
 }
