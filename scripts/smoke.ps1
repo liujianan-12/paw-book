@@ -1,4 +1,4 @@
-# 业务冒烟（S1 最小闭环）：发布时段→预约→支付→回调→核销→开始→完成→日清。
+﻿# 业务冒烟（S1 最小闭环）：发布时段→预约→支付→回调→核销→开始→完成→日清。
 # 仅使用模拟支付渠道回调；不依赖 Docker/MySQL。用法：pwsh -File scripts/smoke.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot

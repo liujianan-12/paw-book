@@ -424,7 +424,8 @@ func TestT02R62_CancelDeniedInCheckedInServiceAndCompleted(t *testing.T) {
 }
 
 // —— R6.1/C4 核销 vs 取消审核并发（10 轮）：每轮唯一合法结果，无双重副作用 ——
-// 说明：本机 CGO_ENABLED=0、无 gcc，-race 无法执行（E1 BLOCKED）；此处用多轮并发 + 终态断言替代。
+// 说明：race 环境已解除 BLOCKED（MSYS2 MinGW-w64，见 docs/evidence/tests/0ee9aee/race-final.txt）；
+// 本用例以 10 轮并发 + 终态断言验证唯一性，另在 go test -race 下复跑通过。
 func TestT02R61_CheckInVsCancelConcurrentSingleWinner(t *testing.T) {
 	ctx := context.Background()
 	for round := 1; round <= 10; round++ {
