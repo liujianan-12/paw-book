@@ -231,8 +231,9 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 			h(w, r) // 未登录交给 handler 返回 401
 			return
 		}
-		// 作用域 = 操作 + 具体路由（含资源 ID）+ 操作者，避免同 key 跨资源/跨用户回放（D-T02-01/D-T02-04）
-		scopeKey := scope + ":" + r.URL.Path
+		// 作用域按操作者隔离（D-T02-01）；key_value 追加具体路由（含资源 ID），
+		// 防止同一用户用同 key 跨资源回放（D-T02-04）。
+		scopeKey := scope
 		if sess.StaffID != 0 {
 			scopeKey += ":staff:" + strconv.FormatInt(sess.StaffID, 10)
 		} else {
@@ -241,7 +242,7 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		sum := sha256.Sum256(body)
+		sum := sha256.Sum256(append([]byte(r.Method+"\n"+r.URL.Path+"\n"), body...))
 		hash := hex.EncodeToString(sum[:])
 
 		var code int

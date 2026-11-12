@@ -652,7 +652,7 @@ func TestBearerTokenAndMockPay(t *testing.T) {
 	}
 }
 
-// 同一用户同一 Idempotency-Key 用在不同资源路径时不得回放（D-T02-04）。
+// 同一用户同一 Idempotency-Key 用在不同资源路径时视为载荷冲突（D-T02-04）。
 func TestIdempotencyScopePerRoute(t *testing.T) {
 	s, _ := newTestServer(t)
 	c := newClient(t, s)
@@ -664,21 +664,24 @@ func TestIdempotencyScopePerRoute(t *testing.T) {
 	r1 := int64(decodeData(t, c.doAs("u1", "POST", "/api/reservations", map[string]any{"slotId": s1, "petId": 1}))["reservationId"].(float64))
 	r2 := int64(decodeData(t, c.doAs("u1", "POST", "/api/reservations", map[string]any{"slotId": s2, "petId": 2}))["reservationId"].(float64))
 
-	pay := func(id int64) *httptest.ResponseRecorder {
+	pay := func(id int64, key string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("POST", fmt.Sprintf("/api/reservations/%d/pay", id), nil)
-		req.Header.Set("Idempotency-Key", "same-key-different-route")
+		if key != "" {
+			req.Header.Set("Idempotency-Key", key)
+		}
 		req.AddCookie(&http.Cookie{Name: "pb_sid", Value: c.roles["u1"]})
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)
 		return rec
 	}
-	p1 := decodeData(t, pay(r1))
-	p2 := decodeData(t, pay(r2))
-	if p1["paymentId"] == p2["paymentId"] {
-		t.Fatalf("不同预约复用同 key 不应回放同一支付单: %v vs %v", p1, p2)
+	decodeData(t, pay(r1, "same-key-different-route"))
+	second := pay(r2, "same-key-different-route")
+	if second.Code != http.StatusConflict || errCode(t, second) != domain.CodeIdemConflict {
+		t.Fatalf("同 key 跨资源应 409 IDEMPOTENCY_CONFLICT，得到 %d %s", second.Code, second.Body.String())
 	}
-	if p2["orderNo"] == p1["orderNo"] {
-		t.Fatalf("不同预约应生成不同 orderNo: %v", p2)
+	// 不带 key 可正常发起，证明第一次未被错误复用
+	if d := decodeData(t, pay(r2, "")); d["paymentId"] == nil {
+		t.Fatalf("第二次支付应成功: %v", d)
 	}
 }
 
