@@ -2,292 +2,186 @@ package biz
 
 import (
 	"context"
-	"sync"
+	"database/sql"
 	"testing"
 	"time"
 
 	"paw-book/internal/model"
 )
 
-// —— 核销正常流程与条件校验（R16/R18/R20） ————————————
-
-func TestCheckInOK(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
-
-	if err := CheckIn(ctx, db, r.ID, 2, testBase.Add(90*time.Minute)); err != nil {
-		t.Fatalf("本店前台核销应成功: %v", err)
+func recordCount(t *testing.T, db *sql.DB, table string, reservationID int64) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE reservation_id=?`, reservationID).Scan(&n); err != nil {
+		t.Fatalf("统计 %s: %v", table, err)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResCheckedIn {
-		t.Fatalf("应为已核销，得到 %s", s)
-	}
-	var checkedAt string
-	if err := db.QueryRow(`SELECT checked_in_at FROM reservations WHERE id=?`, r.ID).Scan(&checkedAt); err != nil || checkedAt == "" {
-		t.Fatalf("应记录核销时间: %q err=%v", checkedAt, err)
-	}
+	return n
 }
 
-func TestCheckInRoleAndStore(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
+// —— R5.1/R5.3 核销：状态、越权与幂等 ————————————————
 
-	// 非前台角色：店长、服务人员、客服都不能核销（R16）
-	for _, empID := range []int64{1, 3, 4} {
-		if err := CheckIn(ctx, db, r.ID, empID, testBase); err == nil {
-			t.Fatalf("员工 %d 不应能核销", empID)
-		}
-	}
-	// 非本店前台（R20）
-	if _, err := db.Exec(`INSERT INTO stores(id, name) VALUES(2, '别家门店')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO employees(id, store_id, name, role) VALUES(8, 2, '别家前台', 'front')`); err != nil {
-		t.Fatal(err)
-	}
-	if err := CheckIn(ctx, db, r.ID, 8, testBase); err == nil {
-		t.Fatal("非本店前台不应能核销")
-	}
-	// 本店前台成功
-	if err := CheckIn(ctx, db, r.ID, 2, testBase); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestCheckInInvalidStates(t *testing.T) {
+func TestCheckInRulesAndIdempotency(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
-	// 待支付不可核销
+	// 未付款不可核销
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	pending := mustCreateReservation(t, db, slotID, 1, 1, testBase)
-	err := CheckIn(ctx, db, pending.ID, 2, testBase)
-	wantBizCode(t, err, CodeInvalidState)
+	_, err := CheckIn(ctx, db, pending.ID, 2, testBase.Add(time.Minute))
+	wantBizCode(t, err, CodeCheckinNotAllow)
 
-	// 取消审核中不可核销（R11：审核期间禁止核销）
-	reviewed := confirmedReservation(t, db, time.Hour, 1, 1)
-	if _, err := CancelReservation(ctx, db, reviewed.ID, 1, "临时有事", testBase.Add(time.Minute), 2*time.Hour); err != nil {
-		t.Fatal(err)
+	// 已确认可核销；重复核销幂等（同员工 / 不同员工）
+	r := confirmedReservation(t, db, 2*time.Hour, 2, 3)
+	already, err := CheckIn(ctx, db, r.ID, 2, testBase.Add(2*time.Minute))
+	if err != nil || already {
+		t.Fatalf("首次核销应成功且 alreadyDone=false: already=%v err=%v", already, err)
 	}
-	err = CheckIn(ctx, db, reviewed.ID, 2, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
+	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCheckedIn {
+		t.Fatalf("应为已到店，得到 %s", st)
+	}
+	if n := recordCount(t, db, "checkin_record", r.ID); n != 1 {
+		t.Fatalf("核销记录应恰有 1 条，得到 %d", n)
+	}
+	already, err = CheckIn(ctx, db, r.ID, 2, testBase.Add(3*time.Minute))
+	if err != nil || !already {
+		t.Fatalf("同员工重复核销应幂等成功: already=%v err=%v", already, err)
+	}
+	already, err = CheckIn(ctx, db, r.ID, 5, testBase.Add(4*time.Minute))
+	if err != nil || !already {
+		t.Fatalf("不同员工重复核销应幂等成功: already=%v err=%v", already, err)
+	}
+	if n := recordCount(t, db, "checkin_record", r.ID); n != 1 {
+		t.Fatalf("重复核销不得新增记录，得到 %d", n)
+	}
+
+	// 角色/门店校验
+	_, err = CheckIn(ctx, db, r.ID, 3, testBase.Add(5*time.Minute)) // 服务人员
+	wantBizCode(t, err, CodeRoleForbidden)
+	_, err = CheckIn(ctx, db, r.ID, 10, testBase.Add(5*time.Minute)) // 别店服务（角色先不符）
+	wantBizCode(t, err, CodeRoleForbidden)
+	_, err = CheckIn(ctx, db, 9999, 2, testBase.Add(5*time.Minute))
+	wantBizCode(t, err, CodeNotFound)
 
 	// 已取消不可核销
-	cancelled := confirmedReservation(t, db, 4*time.Hour, 1, 1)
-	if _, err := CancelReservation(ctx, db, cancelled.ID, 1, "", testBase.Add(time.Minute), 2*time.Hour); err != nil {
+	r2 := confirmedReservation(t, db, 4*time.Hour, 1, 1)
+	if _, err := CancelReservation(ctx, db, r2.ID, 1, "", testBase.Add(time.Minute), 2*time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	err = CheckIn(ctx, db, cancelled.ID, 2, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
-
-	// 重复核销：第二次无效（R18）
-	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
-	if err := CheckIn(ctx, db, r.ID, 2, testBase); err != nil {
-		t.Fatal(err)
-	}
-	err = CheckIn(ctx, db, r.ID, 2, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
+	_, err = CheckIn(ctx, db, r2.ID, 2, testBase.Add(6*time.Minute))
+	wantBizCode(t, err, CodeCheckinNotAllow)
 }
 
-// —— 服务开始/完成（R17/R18） ————————————————————
+// —— R5.2/R5.3 开始与完成：顺序、越级、幂等 ————————————
 
-func TestServiceProgression(t *testing.T) {
+func TestServiceStartAndComplete(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
 
-	if err := CheckIn(ctx, db, r.ID, 2, testBase); err != nil {
+	// 未核销不能开始
+	_, err := StartService(ctx, db, r.ID, 3, testBase.Add(time.Minute))
+	wantBizCode(t, err, CodeServiceNotIn)
+	// 未开始不能完成
+	_, err = CompleteService(ctx, db, r.ID, 3, testBase.Add(time.Minute))
+	wantBizCode(t, err, CodeServiceNotStart)
+
+	if _, err := CheckIn(ctx, db, r.ID, 2, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	// 前台不能登记服务开始（R17：服务人员职责）
-	err := StartService(ctx, db, r.ID, 2, testBase.Add(time.Minute))
-	wantBizCode(t, err, CodePermission)
+	already, err := StartService(ctx, db, r.ID, 3, testBase.Add(3*time.Minute))
+	if err != nil || already {
+		t.Fatalf("开始服务应成功: already=%v err=%v", already, err)
+	}
+	if st, _ := reservationStatus(t, db, r.ID); st != model.ResInService {
+		t.Fatalf("应为服务中，得到 %s", st)
+	}
+	// 重复开始幂等
+	already, err = StartService(ctx, db, r.ID, 6, testBase.Add(4*time.Minute))
+	if err != nil || !already {
+		t.Fatalf("重复开始应幂等: already=%v err=%v", already, err)
+	}
 
-	if err := StartService(ctx, db, r.ID, 3, testBase.Add(time.Minute)); err != nil {
-		t.Fatalf("服务人员开始服务应成功: %v", err)
+	already, err = CompleteService(ctx, db, r.ID, 3, testBase.Add(5*time.Minute))
+	if err != nil || already {
+		t.Fatalf("完成服务应成功: already=%v err=%v", already, err)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResInService {
-		t.Fatalf("应为服务中，得到 %s", s)
+	if st, _ := reservationStatus(t, db, r.ID); st != model.ResCompleted {
+		t.Fatalf("应为已完成，得到 %s", st)
 	}
-	// 重复开始无效
-	err = StartService(ctx, db, r.ID, 3, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
+	already, err = CompleteService(ctx, db, r.ID, 6, testBase.Add(6*time.Minute))
+	if err != nil || !already {
+		t.Fatalf("重复完成应幂等: already=%v err=%v", already, err)
+	}
+	if n := recordCount(t, db, "service_record", r.ID); n != 1 {
+		t.Fatalf("服务记录应恰有 1 条，得到 %d", n)
+	}
+	var started, completed sql.NullString
+	if err := db.QueryRow(`SELECT started_at, completed_at FROM service_record WHERE reservation_id=?`, r.ID).
+		Scan(&started, &completed); err != nil || !started.Valid || !completed.Valid {
+		t.Fatalf("服务记录应含开始与完成时间: err=%v", err)
+	}
 
-	if err := CompleteService(ctx, db, r.ID, 3, testBase.Add(30*time.Minute)); err != nil {
-		t.Fatalf("完成服务应成功: %v", err)
+	// 角色与门店
+	_, err = CheckIn(ctx, db, r.ID, 3, testBase.Add(7*time.Minute))
+	wantBizCode(t, err, CodeRoleForbidden) // 服务人员不能核销
+	r2 := confirmedReservation(t, db, 3*time.Hour, 1, 2)
+	if _, err := CheckIn(ctx, db, r2.ID, 2, testBase.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
 	}
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResCompleted {
-		t.Fatalf("应为已完成，得到 %s", s)
-	}
-	// 重复完成无效：不重复记收入（R18）
-	err = CompleteService(ctx, db, r.ID, 3, testBase.Add(31*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
-	// 已完成后不能再取消（R15）
-	_, err = CancelReservation(ctx, db, r.ID, 1, "太晚了", testBase.Add(32*time.Minute), 2*time.Hour)
-	wantBizCode(t, err, CodeInvalidState)
+	_, err = StartService(ctx, db, r2.ID, 10, testBase.Add(3*time.Minute)) // 别店服务
+	wantBizCode(t, err, CodeStoreMismatch)
 }
 
-// —— 核销与取消并发：恰有一个成功（R19/I5） ————————————
+// —— R7.1/R7.2 未到店：时段结束、必填原因、释放名额、不退款 ——————
 
-func TestConcurrentCheckInVsCancel(t *testing.T) {
-	const rounds = 10
-	for i := 0; i < rounds; i++ {
-		db := testDB(t)
-		ctx := context.Background()
-		r := confirmedReservation(t, db, 4*time.Hour, 1, 1) // ≥2h：取消走自动受理
-
-		var wg sync.WaitGroup
-		var checkInWin, cancelWin bool
-		var mu sync.Mutex
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			err := CheckIn(ctx, db, r.ID, 2, testBase)
-			mu.Lock()
-			checkInWin = err == nil
-			mu.Unlock()
-		}()
-		go func() {
-			defer wg.Done()
-			_, err := CancelReservation(ctx, db, r.ID, 1, "", testBase, 2*time.Hour)
-			mu.Lock()
-			cancelWin = err == nil
-			mu.Unlock()
-		}()
-		wg.Wait()
-
-		if checkInWin == cancelWin {
-			t.Fatalf("第 %d 轮：核销与取消应恰有一个成功（核销=%v 取消=%v）", i, checkInWin, cancelWin)
-		}
-		st, _ := reservationStatus(t, db, r.ID)
-		switch st {
-		case model.ResCheckedIn:
-			if !checkInWin {
-				t.Fatalf("第 %d 轮：状态为已核销但赢方记录不符", i)
-			}
-		case model.ResCancelled:
-			if !cancelWin {
-				t.Fatalf("第 %d 轮：状态为已取消但赢方记录不符", i)
-			}
-			// 取消获胜时应有退款单，金额记录未被破坏
-			var n int
-			if err := db.QueryRow(`SELECT COUNT(*) FROM refunds WHERE reservation_id=? AND amount_cents=?`, r.ID, 9900).Scan(&n); err != nil || n != 1 {
-				t.Fatalf("第 %d 轮：取消获胜应有 1 笔 9900 分退款，得到 %d err=%v", i, n, err)
-			}
-		default:
-			t.Fatalf("第 %d 轮：终态应为已核销或已取消，得到 %s", i, st)
-		}
-		db.Close()
-	}
-}
-
-// —— 审核请求与核销：先到先得 ————————————————————
-
-func TestReviewRequestBlocksCheckIn(t *testing.T) {
+func TestMarkNoShow(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
-	r := confirmedReservation(t, db, time.Hour, 1, 1)
+	r := confirmedReservation(t, db, time.Hour, 1, 1) // 开始 07:00，结束 08:00
 
-	// 用户先提交取消申请 → 审核中
-	if _, err := CancelReservation(ctx, db, r.ID, 1, "临时有事", testBase.Add(time.Minute), 2*time.Hour); err != nil {
+	// 时段未结束
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "未到店", testBase.Add(30*time.Minute)), CodeNoShowTooEarly)
+	// 无原因
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "   ", testBase.Add(3*time.Hour)), CodeNoShowNoReason)
+	// 角色/门店
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 2, "未到店", testBase.Add(3*time.Hour)), CodeRoleForbidden)
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 8, "未到店", testBase.Add(3*time.Hour)), CodeStoreMismatch)
+
+	// 成功
+	if err := MarkNoShow(ctx, db, r.ID, 1, "客户未到场", testBase.Add(3*time.Hour)); err != nil {
+		t.Fatalf("时段结束后应可标记未到店: %v", err)
+	}
+	st, _ := reservationStatus(t, db, r.ID)
+	if st != model.ResNoShow {
+		t.Fatalf("应为未到店，得到 %s", st)
+	}
+	var noShowAt sql.NullString
+	var reason string
+	if err := db.QueryRow(`SELECT no_show_at, no_show_reason FROM reservation WHERE id=?`, r.ID).
+		Scan(&noShowAt, &reason); err != nil || !noShowAt.Valid || reason != "客户未到场" {
+		t.Fatalf("应记录未到店时间与原因: err=%v", err)
+	}
+	// 名额释放一次，且不产生退款
+	if n := reservedCount(t, db, r.SlotID); n != 0 {
+		t.Fatalf("未到店应释放名额，得到 %d", n)
+	}
+	var refunds int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM refund WHERE reservation_id=?`, r.ID).Scan(&refunds); err != nil || refunds != 0 {
+		t.Fatalf("未到店不得产生退款，得到 %d err=%v", refunds, err)
+	}
+	// 终态不可逆
+	wantBizCode(t, MarkNoShow(ctx, db, r.ID, 1, "再标一次", testBase.Add(4*time.Hour)), CodeNotNoShowable)
+
+	// 已完成的预约不能标记未到店（R7.1 仅已确认）
+	done := confirmedReservation(t, db, 2*time.Hour, 1, 2)
+	if _, err := CheckIn(ctx, db, done.ID, 2, testBase); err != nil {
 		t.Fatal(err)
 	}
-	// 前台核销被拒（R11）
-	err := CheckIn(ctx, db, r.ID, 2, testBase.Add(2*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
-
-	// 客服拒绝后核销恢复可用（R12）
-	var reviewID int64
-	if err := db.QueryRow(`SELECT id FROM cancel_reviews WHERE reservation_id=?`, r.ID).Scan(&reviewID); err != nil {
+	if _, err := StartService(ctx, db, done.ID, 3, testBase.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ReviewCancel(ctx, db, reviewID, 4, false, testBase.Add(3*time.Minute)); err != nil {
+	if _, err := CompleteService(ctx, db, done.ID, 3, testBase.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if err := CheckIn(ctx, db, r.ID, 2, testBase.Add(4*time.Minute)); err != nil {
-		t.Fatalf("拒绝后应可核销: %v", err)
-	}
-}
-
-// —— 退款重试（T8，R14/A3） ——————————————————————
-
-func TestRetryRefund(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	r := confirmedReservation(t, db, 4*time.Hour, 1, 1)
-
-	// 提前取消产生退款
-	cres, err := CancelReservation(ctx, db, r.ID, 1, "", testBase.Add(time.Minute), 2*time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	refundID := cres.RefundID
-	refundNo := refundNoOf(t, db, refundID)
-
-	// 渠道退款失败
-	if _, err := HandleRefundNotify(ctx, db, refundNo, false, "渠道超时", testBase.Add(2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if st, _, retry := refundStatusOf(t, db, refundID); st != model.RefundFailed || retry != 1 {
-		t.Fatalf("退款应失败且重试计数 1，得到 %s/%d", st, retry)
-	}
-
-	// 非客服不能重试
-	_, err = RetryRefund(ctx, db, refundID, 3, testBase.Add(3*time.Minute))
-	wantBizCode(t, err, CodePermission)
-
-	// 客服重试：置回处理中
-	if _, err := RetryRefund(ctx, db, refundID, 4, testBase.Add(4*time.Minute)); err != nil {
-		t.Fatalf("客服重试应成功: %v", err)
-	}
-	// 重试后成功回调
-	if _, err := HandleRefundNotify(ctx, db, refundNo, true, "", testBase.Add(5*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if st, _, _ := refundStatusOf(t, db, refundID); st != model.RefundSuccess {
-		t.Fatalf("重试后应成功，得到 %s", st)
-	}
-	// 已成功的退款不能再重试
-	_, err = RetryRefund(ctx, db, refundID, 4, testBase.Add(6*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
-	// 退款成功不影响预约终态（I6）：预约仍是已取消
-	if s, _ := reservationStatus(t, db, r.ID); s != model.ResCancelled {
-		t.Fatalf("预约应保持已取消，得到 %s", s)
-	}
-}
-
-func TestListFailedRefunds(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	r1 := confirmedReservation(t, db, 4*time.Hour, 1, 1)
-	r2 := confirmedReservation(t, db, 5*time.Hour, 2, 3)
-
-	// r1：取消 + 退款失败（待跟进）
-	c1, err := CancelReservation(ctx, db, r1.ID, 1, "", testBase.Add(time.Minute), 2*time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	no1 := refundNoOf(t, db, c1.RefundID)
-	if _, err := HandleRefundNotify(ctx, db, no1, false, "渠道超时", testBase.Add(2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	// r2：取消 + 退款成功
-	c2, err := CancelReservation(ctx, db, r2.ID, 2, "", testBase.Add(time.Minute), 2*time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	no2 := refundNoOf(t, db, c2.RefundID)
-	if _, err := HandleRefundNotify(ctx, db, no2, true, "", testBase.Add(2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-
-	list, err := ListFailedRefunds(ctx, db, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 待跟进 = 失败的 r1；成功的 r2 不在列表
-	if len(list) != 1 || list[0].ReservationID != r1.ID || list[0].FailReason != "渠道超时" {
-		t.Fatalf("应恰有 1 条待跟进退款（r1），得到 %+v", list)
-	}
+	wantBizCode(t, MarkNoShow(ctx, db, done.ID, 1, "已完成", testBase.Add(6*time.Hour)), CodeNotNoShowable)
 }

@@ -4,171 +4,263 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"paw-book/internal/model"
 )
 
-// CreateReservationParams 创建预约参数（R2：只能为本人宠物预约）。
+// CreateReservationParams 创建预约参数（R1.2/R1.3/R1.4/R2.1）。
 type CreateReservationParams struct {
 	SlotID int64
 	UserID int64
 	PetID  int64
 }
 
-// CreateReservation 用户为本人宠物预约时段（R2/R3/R4）。
-// 成功返回生成的预约（待支付，占名额 payHold 时长）。
-// 并发安全：_txlock=immediate 事务串行写 + 部分唯一索引兜底（50 抢 3 恰好 3 成功）。
+// CreateReservation 用户为本人宠物预约时段。
+// 名额采用"条件自增"：UPDATE slot SET reserved_count=reserved_count+1
+// WHERE id=? AND reserved_count<capacity AND start_at>?
+// 一条语句同时完成"加锁 + 容量校验 + 开始时间校验"，避免先查后改。
 func CreateReservation(ctx context.Context, db DBTX, p CreateReservationParams, now time.Time, payHold time.Duration) (*model.Reservation, error) {
-	// R2：宠物归属校验——改请求里的用户 ID 无法替他人宠物预约
+	// R1.2：宠物归属（改请求 ID 无法替他人宠物预约）
 	var ownerID int64
-	err := db.QueryRowContext(ctx, `SELECT user_id FROM pets WHERE id=?`, p.PetID).Scan(&ownerID)
+	err := db.QueryRowContext(ctx, `SELECT user_id FROM pet WHERE id=?`, p.PetID).Scan(&ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodeNotPetOwner, "宠物不存在")
+		return nil, errf(CodePetNotFound, "宠物不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 	if ownerID != p.UserID {
-		return nil, errf(CodeNotPetOwner, "只能为本人名下的宠物预约")
+		return nil, errf(CodePetNotOwned, "只能为本人名下的宠物预约")
 	}
 
 	tx, err := beginTx(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback() //nolint:errcheck // 已提交时回滚是空操作
+	defer tx.Rollback() //nolint:errcheck
 
-	// R4：懒清理过期待支付预约，释放名额后再校验
-	if err := sweepExpiredForSlot(ctx, tx, p.SlotID, now); err != nil {
+	// R2.2：先清理本时段过期占位，避免名额被过期单占用（同一事务内执行）
+	if _, err := expireSlotTx(ctx, tx, p.SlotID, now); err != nil {
 		return nil, err
 	}
 
-	// 时段信息
-	var (
-		storeID, serviceID, capacity int64
-		startAt, endAt               string
-	)
-	err = tx.QueryRowContext(ctx, `SELECT store_id, service_id, start_at, end_at, capacity FROM slots WHERE id=?`, p.SlotID).
-		Scan(&storeID, &serviceID, &startAt, &endAt, &capacity)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errf(CodeNotFound, "时段不存在")
-	}
+	// R1.3/R1.4：容量与开始时间在同一条件内校验
+	res, err := tx.ExecContext(ctx,
+		`UPDATE slot SET reserved_count=reserved_count+1 WHERE id=? AND reserved_count<capacity AND start_at>?`,
+		p.SlotID, fmtTime(now))
 	if err != nil {
 		return nil, err
 	}
-	start, err := parseTime(startAt)
+	if n, _ := res.RowsAffected(); n == 0 {
+		var capacity, reserved int
+		var startAt string
+		qerr := tx.QueryRowContext(ctx, `SELECT capacity, reserved_count, start_at FROM slot WHERE id=?`, p.SlotID).
+			Scan(&capacity, &reserved, &startAt)
+		if errors.Is(qerr, sql.ErrNoRows) {
+			return nil, errf(CodeSlotNotFound, "时段不存在")
+		}
+		if qerr != nil {
+			return nil, qerr
+		}
+		start, perr := parseTime(startAt)
+		if perr != nil {
+			return nil, perr
+		}
+		if !now.Before(start) {
+			return nil, errf(CodeSlotStarted, "时段已开始，不可预约")
+		}
+		return nil, errf(CodeSlotFull, "该时段名额已满（%d/%d）", reserved, capacity)
+	}
+
+	s, err := slotByID(ctx, tx, p.SlotID)
 	if err != nil {
 		return nil, err
 	}
-	// R3：时段已开始不可预约
-	if !now.Before(start) {
-		return nil, errf(CodeSlotStarted, "时段已开始，不可预约")
-	}
-
-	// 预约款 = 本次服务全款（预置 9900 分）
 	var price int64
-	if err := tx.QueryRowContext(ctx, `SELECT price_cents FROM services WHERE id=? AND active=1`, serviceID).Scan(&price); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT price_cents FROM service_item WHERE id=? AND active=1`, s.ItemID).Scan(&price); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errf(CodeNotFound, "服务项目不存在或已下架")
 		}
 		return nil, err
 	}
 
-	// R3：名额校验
-	active, err := countActive(ctx, tx, p.SlotID, now)
-	if err != nil {
-		return nil, err
-	}
-	if active >= int(capacity) {
-		return nil, errf(CodeSlotFull, "该时段名额已满（%d/%d）", active, capacity)
-	}
-
-	// R2：同宠物同时段唯一（显式校验给出友好错误；索引兜底并发窗口）
-	dup, err := countActiveForPet(ctx, tx, p.SlotID, p.PetID, now)
-	if err != nil {
-		return nil, err
-	}
-	if dup > 0 {
-		return nil, errf(CodePetConflict, "该宠物在此时段已有有效预约")
-	}
-
-	deadline := now.Add(payHold)
+	expireAt := now.Add(payHold)
 	created := fmtTime(now)
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO reservations(slot_id, store_id, user_id, pet_id, status, amount_cents, pay_deadline, created_at, updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?)`,
-		p.SlotID, storeID, p.UserID, p.PetID, model.ResPendingPayment, price, fmtTime(deadline), created, created)
+	ins, err := tx.ExecContext(ctx, `
+		INSERT INTO reservation(store_id, slot_id, user_id, pet_id, item_id, status, price_cents,
+		                        pay_expire_at, seat_released, version, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,0,0,?,?)`,
+		s.StoreID, p.SlotID, p.UserID, p.PetID, s.ItemID, model.ResPendingPayment, price,
+		fmtTime(expireAt), created, created)
 	if err != nil {
-		// 并发兜底：唯一索引冲突说明同宠物同时段已有有效预约
-		if strings.Contains(err.Error(), "idx_res_active_slot_pet") {
-			return nil, errf(CodePetConflict, "该宠物在此时段已有有效预约")
+		// I3 兜底：部分唯一索引冲突说明同宠物同时段已有有效预约（事务回滚自动撤销名额 +1）
+		if isConstraintViolation(err, "reservation", "slot_id", "pet_id") || strings.Contains(err.Error(), "uk_slot_pet_active") {
+			return nil, errf(CodeDuplicateActive, "该宠物在此时段已有有效预约")
 		}
 		return nil, err
 	}
-	id, err := res.LastInsertId()
+	id, err := ins.LastInsertId()
 	if err != nil {
 		return nil, err
 	}
-	if err := audit(ctx, tx, "user", p.UserID, "RESERVATION_CREATE", fmt.Sprintf("reservation:%d", id), "", now); err != nil {
+	if err := audit(ctx, tx, p.UserID, "user", s.StoreID, "RESERVATION_CREATE", "reservation", id, "ok", "", now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &model.Reservation{
-		ID:          id,
-		SlotID:      p.SlotID,
-		StoreID:     storeID,
-		UserID:      p.UserID,
-		PetID:       p.PetID,
-		Status:      model.ResPendingPayment,
-		AmountCents: price,
-		PayDeadline: deadline,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID: id, StoreID: s.StoreID, SlotID: p.SlotID, UserID: p.UserID, PetID: p.PetID, ItemID: s.ItemID,
+		Status: model.ResPendingPayment, PriceCents: price, PayExpireAt: expireAt, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
-// CancelPendingReservation 用户取消自己的未支付预约（R4：立即释放名额）。
-// 仅本人 + 待支付状态可取消；释放由状态离开"有效集合"实现，天然只发生一次。
-func CancelPendingReservation(ctx context.Context, db DBTX, reservationID, userID int64, now time.Time) error {
+// CancelUnpaid 用户取消未支付预约（R2.3：释放名额，不产生退款）。
+func CancelUnpaid(ctx context.Context, db DBTX, reservationID, userID int64, now time.Time) error {
 	tx, err := beginTx(ctx, db)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
 
+	// P2：他人预约统一按"不存在"返回，避免泄露存在性
+	var ownerID, slotID int64
+	var status string
+	err = tx.QueryRowContext(ctx, `SELECT user_id, slot_id, status FROM reservation WHERE id=?`, reservationID).
+		Scan(&ownerID, &slotID, &status)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && ownerID != userID) {
+		return errf(CodeNotFound, "预约不存在")
+	}
+	if err != nil {
+		return err
+	}
+	if status != model.ResPendingPayment {
+		return errf(CodeStateInvalid, "当前状态（%s）不可主动取消，仅待支付可取消", status)
+	}
+
 	res, err := tx.ExecContext(ctx,
-		`UPDATE reservations SET status=?, cancel_type=?, updated_at=? WHERE id=? AND user_id=? AND status=?`,
-		model.ResCancelled, model.CancelUser, fmtTime(now), reservationID, userID, model.ResPendingPayment)
+		`UPDATE reservation SET status=?, cancel_type=?, cancelled_at=?, seat_released=1, updated_at=?
+		 WHERE id=? AND status=? AND seat_released=0`,
+		model.ResCancelled, model.CancelUserUnpaid, fmtTime(now), fmtTime(now), reservationID, model.ResPendingPayment)
 	if err != nil {
 		return err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errf(CodeStateInvalid, "预约状态已变化，取消失败")
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE slot SET reserved_count=reserved_count-1 WHERE id=? AND reserved_count>0`, slotID); err != nil {
 		return err
 	}
-	if n == 0 {
-		// 区分三种失败原因，给用户明确提示
-		var uid int64
-		var status string
-		qerr := tx.QueryRowContext(ctx, `SELECT user_id, status FROM reservations WHERE id=?`, reservationID).Scan(&uid, &status)
-		if errors.Is(qerr, sql.ErrNoRows) {
-			return errf(CodeNotFound, "预约不存在")
-		}
-		if qerr != nil {
-			return qerr
-		}
-		if uid != userID {
-			return errf(CodePermission, "只能取消本人的预约")
-		}
-		return errf(CodeInvalidState, "当前状态（%s）不可取消，仅待支付状态可主动取消", status)
-	}
-	if err := audit(ctx, tx, "user", userID, "RESERVATION_CANCEL_PENDING", fmt.Sprintf("reservation:%d", reservationID), "", now); err != nil {
+	if err := audit(ctx, tx, userID, "user", 0, "RESERVATION_CANCEL_UNPAID", "reservation", reservationID, "ok", "", now); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// ReservationDetail 预约详情视图（A7：预约 + 取消申请 + 退款 + 服务进度）。
+type ReservationDetail struct {
+	model.Reservation
+	PetName       string
+	UserName      string
+	SlotStart     string
+	SlotEnd       string
+	CancelReqID   int64
+	CancelReqStat string
+	CancelReason  string
+	RefundID      int64
+	RefundStatus  string
+	RefundRetry   int
+	RefundError   string
+}
+
+// GetReservation 查询预约详情；userID>0 时校验归属（P2）。
+func GetReservation(ctx context.Context, db DBTX, reservationID, userID int64) (*ReservationDetail, error) {
+	var d ReservationDetail
+	var payExpire, createdAt, updatedAt string
+	var paidAt, checkedIn, started, completed, noShowAt, cancelledAt sql.NullString
+	err := db.QueryRowContext(ctx, `
+		SELECT r.id, r.store_id, r.slot_id, r.user_id, r.pet_id, r.item_id, r.status, r.price_cents,
+		       r.pay_expire_at, r.paid_at, r.checked_in_at, r.started_at, r.completed_at,
+		       r.no_show_at, COALESCE(r.no_show_reason,''), r.cancelled_at, COALESCE(r.cancel_type,''),
+		       r.seat_released, r.created_at, r.updated_at,
+		       p.name, u.name, s.start_at, s.end_at
+		FROM reservation r
+		JOIN pet p ON p.id = r.pet_id
+		JOIN app_user u ON u.id = r.user_id
+		JOIN slot s ON s.id = r.slot_id
+		WHERE r.id=?`, reservationID).Scan(
+		&d.ID, &d.StoreID, &d.SlotID, &d.UserID, &d.PetID, &d.ItemID, &d.Status, &d.PriceCents,
+		&payExpire, &paidAt, &checkedIn, &started, &completed, &noShowAt, &d.NoShowReason, &cancelledAt, &d.CancelType,
+		&d.SeatReleased, &createdAt, &updatedAt, &d.PetName, &d.UserName, &d.SlotStart, &d.SlotEnd)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errf(CodeNotFound, "预约不存在")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if userID > 0 && d.UserID != userID {
+		return nil, errf(CodeNotFound, "预约不存在")
+	}
+	d.PayExpireAt, _ = parseTime(payExpire)
+	d.CreatedAt, _ = parseTime(createdAt)
+	d.UpdatedAt, _ = parseTime(updatedAt)
+
+	// 取消申请（取最近一条）
+	var reqStatus, reqReason sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT id, status, reason FROM cancel_request WHERE reservation_id=? ORDER BY id DESC LIMIT 1`, reservationID).
+		Scan(&d.CancelReqID, &reqStatus, &reqReason); err == nil {
+		d.CancelReqStat = reqStatus.String
+		d.CancelReason = reqReason.String
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	// 退款单
+	var rfStatus, rfErr sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT id, status, retry_count, COALESCE(last_error,'') FROM refund WHERE reservation_id=?`, reservationID).
+		Scan(&d.RefundID, &rfStatus, &d.RefundRetry, &rfErr); err == nil {
+		d.RefundStatus = rfStatus.String
+		d.RefundError = rfErr.String
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// ListMyReservations 用户自己的预约列表（A8）。
+func ListMyReservations(ctx context.Context, db DBTX, userID int64, limit int) ([]ReservationDetail, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT r.id FROM reservation r WHERE r.user_id=? ORDER BY r.id DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var out []ReservationDetail
+	for _, id := range ids {
+		d, err := GetReservation(ctx, db, id, 0)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *d)
+	}
+	return out, nil
 }

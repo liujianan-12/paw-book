@@ -20,39 +20,39 @@ func mustCreatePayment(t *testing.T, db *sql.DB, reservationID, userID int64, no
 	return p
 }
 
-func payNotify(t *testing.T, db *sql.DB, outTradeNo string, success bool, now time.Time) *PayNotifyResult {
+func payNotify(t *testing.T, db *sql.DB, txnID, orderNo string, success bool, now time.Time) *PayNotifyResult {
 	t.Helper()
-	r, err := HandlePayNotify(context.Background(), db, outTradeNo, success, now)
+	r, err := HandlePayNotify(context.Background(), db, txnID, orderNo, success, now)
 	if err != nil {
 		t.Fatalf("处理支付回调失败: %v", err)
 	}
 	return r
 }
 
-func refundStatusOf(t *testing.T, db *sql.DB, id int64) (string, string, int) {
+// confirmedReservation 预置一个"已确认（已支付）"预约，返回预约。
+func confirmedReservation(t *testing.T, db *sql.DB, slotStartIn time.Duration, userID, petID int64) *model.Reservation {
 	t.Helper()
-	var status, failReason string
-	var retry int
-	var fr sql.NullString
-	if err := db.QueryRow(`SELECT status, fail_reason, retry_count FROM refunds WHERE id=?`, id).Scan(&status, &fr, &retry); err != nil {
-		t.Fatalf("查询退款单 %d: %v", id, err)
+	slotID := mustCreateSlot(t, db, slotStartIn, time.Hour, 3)
+	r := mustCreateReservation(t, db, slotID, userID, petID, testBase)
+	p := mustCreatePayment(t, db, r.ID, userID, testBase)
+	payNotify(t, db, "txn-"+p.OrderNo, p.OrderNo, true, testBase.Add(time.Minute))
+	if st, _ := reservationStatus(t, db, r.ID); st != model.ResConfirmed {
+		t.Fatalf("前置失败：预约应已确认，得到 %s", st)
 	}
-	if fr.Valid {
-		failReason = fr.String
-	}
-	return status, failReason, retry
+	return r
 }
 
-func reservationRawStatus(t *testing.T, db *sql.DB, id int64) string {
+func paymentSuccessCount(t *testing.T, db *sql.DB, reservationID int64) int {
 	t.Helper()
-	var s string
-	if err := db.QueryRow(`SELECT status FROM reservations WHERE id=?`, id).Scan(&s); err != nil {
-		t.Fatalf("查询预约 %d: %v", id, err)
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM payment WHERE reservation_id=? AND status=?`,
+		reservationID, model.PaySuccess).Scan(&n); err != nil {
+		t.Fatalf("统计成功支付: %v", err)
 	}
-	return s
+	return n
 }
 
-// —— 发起支付校验 ——————————————————————————
+// —— A4/R2.7 发起支付校验 ————————————————————
 
 func TestCreatePaymentOK(t *testing.T) {
 	db := testDB(t)
@@ -60,8 +60,11 @@ func TestCreatePaymentOK(t *testing.T) {
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 
 	p := mustCreatePayment(t, db, r.ID, 1, testBase.Add(time.Minute))
-	if p.Status != model.PayCreated || p.AmountCents != 9900 || p.OutTradeNo == "" {
+	if p.Status != model.PayInit || p.AmountCents != 9900 || p.OrderNo == "" || p.Attempt != 1 {
 		t.Fatalf("支付单字段不符: %+v", p)
+	}
+	if p.ReservationID != r.ID {
+		t.Fatalf("支付单应关联预约 %d，得到 %d", r.ID, p.ReservationID)
 	}
 }
 
@@ -70,7 +73,7 @@ func TestCreatePaymentWrongOwner(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CreatePayment(context.Background(), db, r.ID, 2, testBase)
-	wantBizCode(t, err, CodePermission)
+	wantBizCode(t, err, CodeNotFound)
 }
 
 func TestCreatePaymentAfterDeadlineRejected(t *testing.T) {
@@ -78,10 +81,20 @@ func TestCreatePaymentAfterDeadlineRejected(t *testing.T) {
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	_, err := CreatePayment(context.Background(), db, r.ID, 1, testBase.Add(6*time.Minute))
-	wantBizCode(t, err, CodeInvalidState)
+	wantBizCode(t, err, CodePaymentExpired)
+	if st, _ := reservationStatus(t, db, r.ID); st != model.ResExpired {
+		t.Fatalf("超时支付应把占位清理为过期，得到 %s", st)
+	}
 }
 
-// —— 回调：确认 / 失败 / 幂等（R6/R9/R7） ————————————
+func TestCreatePaymentNotPending(t *testing.T) {
+	db := testDB(t)
+	r := confirmedReservation(t, db, 2*time.Hour, 1, 1)
+	_, err := CreatePayment(context.Background(), db, r.ID, 1, testBase.Add(2*time.Minute))
+	wantBizCode(t, err, CodePaymentNotPend)
+}
+
+// —— R2.4/R2.5 回调确认、失败保持与幂等 ————————————
 
 func TestPayNotifyConfirmsReservation(t *testing.T) {
 	db := testDB(t)
@@ -89,30 +102,44 @@ func TestPayNotifyConfirmsReservation(t *testing.T) {
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	p := mustCreatePayment(t, db, r.ID, 1, testBase)
 
-	res := payNotify(t, db, p.OutTradeNo, true, testBase.Add(time.Minute))
-	if !res.Confirmed {
-		t.Fatal("首次成功回调应确认预约")
+	res := payNotify(t, db, "txn-1", p.OrderNo, true, testBase.Add(time.Minute))
+	if res.Result != model.NotifyConfirmed {
+		t.Fatalf("首次成功回调应确认预约，得到 %s", res.Result)
 	}
-	if s := reservationRawStatus(t, db, r.ID); s != model.ResConfirmed {
+	if s, _ := reservationStatus(t, db, r.ID); s != model.ResConfirmed {
 		t.Fatalf("预约应转为已确认，得到 %s", s)
+	}
+	var paidAt sql.NullString
+	if err := db.QueryRow(`SELECT paid_at FROM reservation WHERE id=?`, r.ID).Scan(&paidAt); err != nil || !paidAt.Valid {
+		t.Fatalf("paid_at 应有值: %v valid=%v", err, paidAt.Valid)
 	}
 }
 
-func TestPayNotifyFailedKeepsPending(t *testing.T) {
+func TestPayNotifyFailedThenRetrySucceeds(t *testing.T) {
 	db := testDB(t)
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
-	p := mustCreatePayment(t, db, r.ID, 1, testBase)
+	p1 := mustCreatePayment(t, db, r.ID, 1, testBase)
 
-	payNotify(t, db, p.OutTradeNo, false, testBase.Add(time.Minute))
-	if s := reservationRawStatus(t, db, r.ID); s != model.ResPendingPayment {
+	fail := payNotify(t, db, "txn-fail-1", p1.OrderNo, false, testBase.Add(time.Minute))
+	if fail.Result != model.NotifyRejected {
+		t.Fatalf("失败回调结果应为 REJECTED，得到 %s", fail.Result)
+	}
+	if s, _ := reservationStatus(t, db, r.ID); s != model.ResPendingPayment {
 		t.Fatalf("失败回调后预约应保持待支付，得到 %s", s)
 	}
-	// 失败后可重新发起支付
+
+	// R2.7：重试生成新流水与新 order_no
 	p2 := mustCreatePayment(t, db, r.ID, 1, testBase.Add(2*time.Minute))
-	res := payNotify(t, db, p2.OutTradeNo, true, testBase.Add(3*time.Minute))
-	if !res.Confirmed {
-		t.Fatal("重试支付成功后应确认")
+	if p2.ID == p1.ID || p2.OrderNo == p1.OrderNo || p2.Attempt != 2 {
+		t.Fatalf("重试应生成新流水/新单号/attempt=2: %+v", p2)
+	}
+	res := payNotify(t, db, "txn-ok-2", p2.OrderNo, true, testBase.Add(3*time.Minute))
+	if res.Result != model.NotifyConfirmed {
+		t.Fatalf("重试成功应确认，得到 %s", res.Result)
+	}
+	if n := paymentSuccessCount(t, db, r.ID); n != 1 {
+		t.Fatalf("同一预约只允许一条成功支付，得到 %d", n)
 	}
 }
 
@@ -122,158 +149,73 @@ func TestPayNotifyDuplicateIsIdempotent(t *testing.T) {
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	p := mustCreatePayment(t, db, r.ID, 1, testBase)
 
-	payNotify(t, db, p.OutTradeNo, true, testBase.Add(time.Minute))
-	second := payNotify(t, db, p.OutTradeNo, true, testBase.Add(2*time.Minute))
-	if !second.Duplicated {
-		t.Fatal("重复成功通知应标记为幂等忽略")
+	payNotify(t, db, "txn-dup", p.OrderNo, true, testBase.Add(time.Minute))
+	second := payNotify(t, db, "txn-dup", p.OrderNo, true, testBase.Add(2*time.Minute))
+	if second.Result != model.NotifyDuplicate {
+		t.Fatalf("重复流水应幂等忽略，得到 %s", second.Result)
 	}
-	if s := reservationRawStatus(t, db, r.ID); s != model.ResConfirmed {
+	if s, _ := reservationStatus(t, db, r.ID); s != model.ResConfirmed {
 		t.Fatalf("重复通知不得改变状态，得到 %s", s)
 	}
-	// 确认动作只发生过一次
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE action='PAYMENT_CONFIRM'`).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("确认审计应恰有 1 条，得到 %d err=%v", n, err)
+	if err := db.QueryRow(`SELECT COUNT(*) FROM payment_notification WHERE channel_txn_id='txn-dup'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("同一渠道流水只应记录 1 条，得到 %d err=%v", n, err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM operation_log WHERE action='PAYMENT_NOTIFY' AND result='CONFIRMED'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("确认动作只应发生 1 次，得到 %d err=%v", n, err)
 	}
 }
 
-// —— 回调：预约已关闭（R8） ————————————————————
-
-func TestPayNotifyAfterUserCancelMakesExceptionAndRefund(t *testing.T) {
+func TestPayNotifyUnknownOrder(t *testing.T) {
 	db := testDB(t)
+	_, err := HandlePayNotify(context.Background(), db, "txn-x", "NO-SUCH-ORDER", true, testBase)
+	wantBizCode(t, err, CodePaymentNotFound)
+}
+
+// —— R2.6 关闭后支付：异常 + 退款、状态不变 ————————————
+
+func TestPayNotifyAfterCancelMakesAnomalyAndRefund(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
 	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
 	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
 	p := mustCreatePayment(t, db, r.ID, 1, testBase)
 
-	// 用户在回调到达前主动取消了预约（关闭）
-	if err := CancelPendingReservation(context.Background(), db, r.ID, 1, testBase.Add(time.Minute)); err != nil {
+	if err := CancelUnpaid(ctx, db, r.ID, 1, testBase.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-
-	res := payNotify(t, db, p.OutTradeNo, true, testBase.Add(2*time.Minute))
-	if !res.Exception || res.RefundID == 0 {
-		t.Fatalf("应登记支付异常并创建退款: %+v", res)
+	res := payNotify(t, db, "txn-late-cancel", p.OrderNo, true, testBase.Add(2*time.Minute))
+	if res.Result != model.NotifyAnomalyRefund || res.RefundID == 0 {
+		t.Fatalf("关闭后支付应异常退款: %+v", res)
 	}
-	if s := reservationRawStatus(t, db, r.ID); s != model.ResCancelled {
-		t.Fatalf("预约必须保持关闭不恢复，得到 %s", s)
+	if s, _ := reservationStatus(t, db, r.ID); s != model.ResCancelled {
+		t.Fatalf("预约必须保持已取消，得到 %s", s)
 	}
-	// 退款单独立可查，金额与支付一致
-	status, _, _ := refundStatusOf(t, db, res.RefundID)
-	if status != model.RefundPending {
-		t.Fatalf("异常退款应处于待退款，得到 %s", status)
-	}
-	// 支付异常登记存在
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM payment_exceptions WHERE payment_id=? AND refund_id=?`, res.PaymentID, res.RefundID).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("支付异常登记应恰有 1 条: n=%d err=%v", n, err)
+	if err := db.QueryRow(`SELECT COUNT(*) FROM payment_anomaly WHERE payment_id=?`, p.ID).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("支付异常应恰有 1 条，得到 %d err=%v", n, err)
+	}
+	id, status, retry, _ := refundOf(t, db, r.ID)
+	if id != res.RefundID || status != model.RefundPending || retry != 0 {
+		t.Fatalf("退款单应为待处理且未重试: id=%d status=%s retry=%d", id, status, retry)
 	}
 }
 
 func TestPayNotifyLateSuccessAfterDeadline(t *testing.T) {
 	db := testDB(t)
-	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
-	r := mustCreateReservation(t, db, slotID, 1, 1, testBase) // 截止 06:05
+	slotID := mustCreateSlot(t, db, 4*time.Hour, time.Hour, 3)
+	r := mustCreateReservation(t, db, slotID, 1, 1, testBase) // 占位截止 06:05
 	p := mustCreatePayment(t, db, r.ID, 1, testBase)
 
-	// 06:08 渠道才回调成功（迟到通知）
-	res := payNotify(t, db, p.OutTradeNo, true, testBase.Add(8*time.Minute))
-	if !res.Exception {
-		t.Fatalf("超时关闭后的迟到成功应走异常退款: %+v", res)
+	// 06:08 渠道才回调成功：先过期占位，再走异常退款
+	res := payNotify(t, db, "txn-late", p.OrderNo, true, testBase.Add(8*time.Minute))
+	if res.Result != model.NotifyAnomalyRefund {
+		t.Fatalf("超时关闭后的迟到成功应走异常退款: %s", res.Result)
 	}
-	// 预约被按超时取消口径处理
-	st, ct := reservationStatus(t, db, r.ID)
-	if st != model.ResCancelled || ct != model.CancelTimeout {
-		t.Fatalf("预约应为超时取消，得到 %s/%s", st, ct)
+	if st, ct := reservationStatus(t, db, r.ID); st != model.ResExpired || ct != model.CancelExpired {
+		t.Fatalf("预约应为超时过期，得到 %s/%s", st, ct)
 	}
-}
-
-// —— 退款回调（R14/I6） ———————————————————————
-
-func TestRefundNotifyLifecycle(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	slotID := mustCreateSlot(t, db, 2*time.Hour, time.Hour, 3)
-	r := mustCreateReservation(t, db, slotID, 1, 1, testBase)
-	p := mustCreatePayment(t, db, r.ID, 1, testBase)
-
-	// 先走异常退款路径拿到退款单
-	if err := CancelPendingReservation(ctx, db, r.ID, 1, testBase.Add(time.Minute)); err != nil {
-		t.Fatal(err)
+	if id, status, _, _ := refundOf(t, db, r.ID); id == 0 || status != model.RefundPending {
+		t.Fatalf("应生成待处理退款单，得到 id=%d status=%s", id, status)
 	}
-	res := payNotify(t, db, p.OutTradeNo, true, testBase.Add(2*time.Minute))
-	if !res.Exception {
-		t.Fatalf("应产生异常退款: %+v", res)
-	}
-
-	// 第一次退款回调：失败（渠道超时）
-	if _, err := HandleRefundNotify(ctx, db, refundNoOf(t, db, res.RefundID), false, "渠道超时", testBase.Add(3*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	st, reason, retry := refundStatusOf(t, db, res.RefundID)
-	if st != model.RefundFailed || reason != "渠道超时" || retry != 1 {
-		t.Fatalf("退款应记失败与原因: 状态=%s 原因=%s 重试=%d", st, reason, retry)
-	}
-	// 退款失败不影响预约终态（I6）
-	if s := reservationRawStatus(t, db, r.ID); s != model.ResCancelled {
-		t.Fatalf("退款失败不得改变预约，得到 %s", s)
-	}
-
-	// 重试后成功
-	if _, err := HandleRefundNotify(ctx, db, refundNoOf(t, db, res.RefundID), true, "", testBase.Add(4*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if st, _, _ := refundStatusOf(t, db, res.RefundID); st != model.RefundSuccess {
-		t.Fatalf("重试后退款应成功，得到 %s", st)
-	}
-
-	// 重复成功通知幂等
-	dup, err := HandleRefundNotify(ctx, db, refundNoOf(t, db, res.RefundID), true, "", testBase.Add(5*time.Minute))
-	if err != nil || !dup.Duplicated {
-		t.Fatalf("重复退款成功通知应幂等: %+v err=%v", dup, err)
-	}
-}
-
-func refundNoOf(t *testing.T, db *sql.DB, id int64) string {
-	t.Helper()
-	var no string
-	if err := db.QueryRow(`SELECT refund_no FROM refunds WHERE id=?`, id).Scan(&no); err != nil {
-		t.Fatalf("查询退款单号: %v", err)
-	}
-	return no
-}
-
-// —— 全局扫描（T6，R4/R13/I4） ——————————————————
-
-func TestSweepExpiredReservations(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-	slot1 := mustCreateSlot(t, db, 4*time.Hour, time.Hour, 3)
-	slot2 := mustCreateSlot(t, db, 5*time.Hour, time.Hour, 3)
-
-	r1 := mustCreateReservation(t, db, slot1, 1, 1, testBase)                    // 截止 06:05
-	r2 := mustCreateReservation(t, db, slot2, 2, 3, testBase)                    // 截止 06:05
-	r3 := mustCreateReservation(t, db, slot1, 1, 2, testBase.Add(4*time.Minute)) // 截止 06:09，未过期
-
-	// 06:06 扫描：r1、r2 应被取消，r3 未到期不动
-	n, err := SweepExpiredReservations(ctx, db, testBase.Add(6*time.Minute))
-	if err != nil || n != 2 {
-		t.Fatalf("应取消 2 条，得到 %d err=%v", n, err)
-	}
-	for _, id := range []int64{r1.ID, r2.ID} {
-		if st, ct := reservationStatus(t, db, id); st != model.ResCancelled || ct != model.CancelTimeout {
-			t.Fatalf("过期预约应为超时取消，得到 %s/%s", st, ct)
-		}
-	}
-	if st, _ := reservationStatus(t, db, r3.ID); st != model.ResPendingPayment {
-		t.Fatalf("未过期预约不应被取消，得到 %s", st)
-	}
-
-	// 幂等：再次扫描无新增
-	n2, err := SweepExpiredReservations(ctx, db, testBase.Add(7*time.Minute))
-	if err != nil || n2 != 0 {
-		t.Fatalf("重复扫描应取消 0 条，得到 %d err=%v", n2, err)
-	}
-
-	// 名额已释放：slot1 上新的有效预约可成立
-	mustCreateReservation(t, db, slot1, 2, 3, testBase.Add(8*time.Minute))
 }
