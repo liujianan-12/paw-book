@@ -32,7 +32,10 @@ document.getElementById('f').onsubmit = async (e) => {
   try {
     const role = document.getElementById('account').value.trim() === 'u1' ? 'user' : 'staff';
     const data = await api('POST','/api/auth/login',{account:document.getElementById('account').value,password:document.getElementById('password').value});
-    out.textContent = '登录成功：' + data.name + '（' + data.role + '）\n' + (data.role==='user'?'请打开用户页':'请打开对应员工页');
+    out.textContent = '登录成功：' + data.name + '（' + data.role + '），正在跳转…';
+    const next = new URLSearchParams(location.search).get('next');
+    const home = {user:'/user.html',manager:'/manager.html',reception:'/reception.html',server:'/service.html',cs:'/cs.html'}[data.role] || '/login.html';
+    location.href = next || home;
   } catch (err) { out.textContent = '登录失败：' + err.message; }
 };
 </script>

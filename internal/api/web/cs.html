@@ -11,6 +11,7 @@ button{padding:3px 8px;margin:1px}pre{background:#f5f5f5;padding:8px;white-space
 <h3>退款单</h3>
 <table id="refs"><thead><tr><th>ID</th><th>预约</th><th>金额</th><th>状态</th><th>重试次数</th><th>失败原因</th><th>操作</th></tr></thead><tbody></tbody></table>
 <pre id="out">就绪</pre>
+<script src="/guard.js"></script>
 <script>
 const out = document.getElementById('out');
 async function api(method, path, body) {
@@ -49,6 +50,6 @@ async function load(){
     });
   } catch(e) { out.textContent = '加载失败：' + e.message; }
 }
-load();
+requireLogin('cs').then(s => { if (s) load(); });
 </script>
 </body></html>

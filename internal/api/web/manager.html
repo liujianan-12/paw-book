@@ -23,6 +23,7 @@ input,button{font-size:14px;padding:5px 7px;margin:3px}pre{background:#f5f5f5;pa
 <table id="rep"><thead><tr><th>时段</th><th>有效</th><th>完成</th><th>取消</th><th>未到店</th><th>退款待处理</th></tr></thead><tbody></tbody></table>
 <pre id="sum">就绪</pre>
 <pre id="out"></pre>
+<script src="/guard.js"></script>
 <script>
 const out = document.getElementById('out'), sum = document.getElementById('sum');
 async function api(method, path, body) {
@@ -60,6 +61,6 @@ async function load(){
   } catch(err) { sum.textContent = '日清加载失败：' + err.message; }
 }
 document.getElementById('refresh').onclick = load;
-load();
+requireLogin('manager').then(s => { if (s) load(); });
 </script>
 </body></html>

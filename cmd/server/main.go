@@ -27,8 +27,16 @@ func main() {
 	if err := store.Migrate(context.Background(), db); err != nil {
 		log.Fatalf("迁移失败: %v", err)
 	}
+	nowFn := buildClock(cfg)
+	if os.Getenv("PAW_SEED_DEMO") == "1" {
+		if n, err := store.SeedSlots(context.Background(), db, nowFn()); err != nil {
+			log.Fatalf("预置演示时段失败: %v", err)
+		} else if n > 0 {
+			log.Printf("已预置 %d 个演示时段", n)
+		}
+	}
 
-	srv := api.New(db, buildClock(cfg), cfg.CancelCutoff, cfg.PayHoldTimeout, cfg.PaySecret)
+	srv := api.New(db, nowFn, cfg.CancelCutoff, cfg.PayHoldTimeout, cfg.PaySecret)
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           srv.Handler(),

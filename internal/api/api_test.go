@@ -134,7 +134,7 @@ func TestAuthPagesAndHealth(t *testing.T) {
 	s, _ := newTestServer(t)
 	c := newClient(t, s)
 
-	for _, path := range []string{"/login.html", "/user.html", "/reception.html", "/service.html", "/cs.html", "/manager.html"} {
+	for _, path := range []string{"/login.html", "/user.html", "/reception.html", "/service.html", "/cs.html", "/manager.html", "/guard.js"} {
 		rec := c.doAs("", "GET", path, nil)
 		if rec.Code != 200 || rec.Header().Get("Content-Type") == "" {
 			t.Fatalf("页面 %s 应可访问: %d", path, rec.Code)

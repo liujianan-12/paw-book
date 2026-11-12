@@ -12,6 +12,7 @@ button{padding:4px 8px;margin:2px}pre{background:#f5f5f5;padding:8px;white-space
 <h3>我的预约</h3>
 <table id="mine"><thead><tr><th>ID</th><th>状态</th><th>金额(分)</th><th>退款</th><th>操作</th></tr></thead><tbody></tbody></table>
 <pre id="out">就绪</pre>
+<script src="/guard.js"></script>
 <script>
 const out = document.getElementById('out');
 async function api(method, path, body) {
@@ -57,6 +58,6 @@ async function loadMine(){
     });
   } catch(e) { say('加载我的预约失败：'+e.message); }
 }
-loadSlots(); loadMine();
+requireLogin('user').then(s => { if (s) { loadSlots(); loadMine(); } });
 </script>
 </body></html>
