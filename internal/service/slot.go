@@ -33,7 +33,9 @@ func CreateSlot(ctx context.Context, db repo.DBTX, p CreateSlotParams, now time.
 		return 0, domain.Errf(domain.CodeInvalidParam, "结束时间必须晚于开始时间")
 	}
 	if !p.StartAt.After(now) {
-		return 0, domain.Errf(domain.CodeInvalidParam, "开始时间必须在未来")
+		// 教学时钟固定时最容易踩“本地时间等于服务器当前时刻”，把服务器时间一并返回便于对照
+		return 0, domain.Errf(domain.CodeInvalidParam,
+			"开始时间必须在未来（服务器当前 %s，请按该时刻之后的本地时间选择）", repo.FmtTime(now))
 	}
 	if p.Capacity < 1 || p.Capacity > 3 {
 		return 0, domain.Errf(domain.CodeInvalidParam, "每时段容量必须在 1–3 之间（本题固定 3）")

@@ -168,7 +168,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeOK(w, sess)
+	writeOK(w, map[string]any{
+		"UserID": sess.UserID, "StaffID": sess.StaffID, "Role": sess.Role,
+		"StoreID": sess.StoreID, "Name": sess.Name,
+		// 教学时钟下的服务器时间，页面据此填写“未来时段”
+		"ServerNow": repo.FmtTime(s.Now()),
+	})
 }
 
 // require 从会话取身份并按角色授权（未登录 401，角色不符 403）。
