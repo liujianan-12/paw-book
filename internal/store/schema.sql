@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS payments (
 -- 退款单独立于预约状态（R14/I6）
 CREATE TABLE IF NOT EXISTS refunds (
     id             INTEGER PRIMARY KEY,
+    refund_no      TEXT NOT NULL UNIQUE,
     reservation_id INTEGER NOT NULL REFERENCES reservations(id),
     payment_id     INTEGER NOT NULL REFERENCES payments(id),
     amount_cents   INTEGER NOT NULL,
