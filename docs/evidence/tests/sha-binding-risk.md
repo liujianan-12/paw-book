@@ -45,3 +45,10 @@ GitHub MCP 建仓、Meegle 编号（无权限 / 无应用，`#1001` 为占位编
 - `docs/evidence/git/main-protection.png` 截图 MISSING；保护规则证据不足，验收报告 G2 保持 BLOCKED。
 - GitHub MCP 保持 BLOCKED：`docs/evidence/git/mcp-github-BLOCKED.md`（三次工具检索 0 结果、未读取 token）。
 - **「验收 SHA ≠ 发布 SHA」风险仍成立**，上方「合并后待执行清单」全部待执行；本轮未创建 `<新SHA>` 证据目录、未改验收报告绑定 SHA 与统计、未伪造门禁输出。
+
+## 双远程复核（2026-11-12 19:35）
+
+- `origin` 已改为 GitHub `https://github.com/liujianan-12/paw-book.git`，`gitee` 保留原地址；GitHub `git ls-remote --symref origin HEAD` → `ref: refs/heads/main HEAD`（默认分支 `main` 已核验）。
+- 两边 `main` 均为 `a92e5cd79d1d43c761c3abbd0365e6ebe9d6576b`，`dev/02-pet-booking` 为 `0c7c1ef09c2ff162483d275c050e6312e17854f7`；**PR 仍未创建 / 未合并**。
+- 结论不变：合并提交 SHA 不存在，验收 SHA ≠ 发布 SHA；合并后须按上方清单重跑并归档到 `docs/evidence/tests/<合并SHA>/`，再由独立验收会话绑定新 SHA。
+- 原始核验输出：`docs/evidence/git/github-repo-2026-11-12.md`。
