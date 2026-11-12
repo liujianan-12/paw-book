@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>店长日清</title>
+<style>body{font-family:system-ui;max-width:980px;margin:24px auto;padding:0 16px}
+table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #ddd;padding:5px;font-size:13px}
+input,button{font-size:14px;padding:5px 7px;margin:3px}pre{background:#f5f5f5;padding:8px;white-space:pre-wrap}</style></head>
+<body>
+<h2>店长：发布时段 / 未到店 / 日清</h2>
+<p><a href="/login.html">切换账号（mgr）</a></p>
+<h3>发布时段</h3>
+<form id="slotForm">
+  <input id="start" type="datetime-local" required>
+  <input id="end" type="datetime-local" required>
+  <button>发布（容量 3）</button>
+</form>
+<h3>标记未到店</h3>
+<form id="nsForm">
+  <input id="rid" type="number" placeholder="预约 ID" required>
+  <input id="reason" placeholder="原因（必填）" required>
+  <button>标记</button>
+</form>
+<h3>日清（当日）</h3>
+<button id="refresh">刷新</button>
+<table id="rep"><thead><tr><th>时段</th><th>有效</th><th>完成</th><th>取消</th><th>未到店</th><th>退款待处理</th></tr></thead><tbody></tbody></table>
+<pre id="sum">就绪</pre>
+<pre id="out"></pre>
+<script>
+const out = document.getElementById('out'), sum = document.getElementById('sum');
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined});
+  const j = await r.json();
+  if (j.code !== 0) throw new Error(j.code + ': ' + j.message);
+  return j.data;
+}
+document.getElementById('slotForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const d = await api('POST','/api/manager/slots', {
+      startAt: new Date(document.getElementById('start').value).toISOString(),
+      endAt: new Date(document.getElementById('end').value).toISOString(), capacity: 3});
+    out.textContent = '已发布时段 ' + d.slotId;
+  } catch(err) { out.textContent = '发布失败：' + err.message; }
+};
+document.getElementById('nsForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api('POST', `/api/manager/reservations/${document.getElementById('rid').value}/no-show`, {reason: document.getElementById('reason').value});
+    out.textContent = '已标记未到店（不退款）';
+  } catch(err) { out.textContent = '标记失败：' + err.message; }
+};
+async function load(){
+  try {
+    const d = await api('GET','/api/manager/daily-close');
+    const tb = document.querySelector('#rep tbody'); tb.innerHTML='';
+    (d.Slots||[]).forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${s.StartAt}</td><td>${s.ActiveCount}</td><td>${s.Completed}</td><td>${s.Cancelled}</td><td>${s.NoShow}</td><td>${s.RefundPending}</td>`;
+      tb.appendChild(tr);
+    });
+    sum.textContent = `已收款 ${d.CollectedCents} 分 / 已完成收入 ${d.CompletedIncomeCents} 分 / 已退款 ${d.RefundedCents} 分 / 待退款 ${d.RefundPendingCents} 分 / 未到店保留 ${d.NoShowHeldCents} 分 / 履约中 ${d.ActiveHeldCents} 分\n勾稽差额 ${d.UnaccountedCents} 分（必须为 0）；退款待处理 ${d.RefundPendingCount} 笔；支付异常 ${d.PaymentExceptionCount} 笔`;
+  } catch(err) { sum.textContent = '日清加载失败：' + err.message; }
+}
+document.getElementById('refresh').onclick = load;
+load();
+</script>
+</body></html>

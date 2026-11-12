@@ -1,0 +1,10 @@
+mode: set
+paw-book/internal/domain/errs.go:47.35,47.82 1 1
+paw-book/internal/domain/errs.go:49.52,51.2 1 1
+paw-book/internal/domain/model.go:22.39,23.16 1 1
+paw-book/internal/domain/model.go:24.104,25.14 1 1
+paw-book/internal/domain/model.go:27.2,27.14 1 1
+paw-book/internal/domain/model.go:31.36,31.69 1 1
+paw-book/internal/domain/model.go:34.37,35.16 1 1
+paw-book/internal/domain/model.go:36.57,37.14 1 1
+paw-book/internal/domain/model.go:39.2,39.14 1 1
