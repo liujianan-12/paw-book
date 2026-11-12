@@ -231,7 +231,8 @@ func (s *Server) idem(scope string, h http.HandlerFunc) http.HandlerFunc {
 			h(w, r) // 未登录交给 handler 返回 401
 			return
 		}
-		scopeKey := scope
+		// 作用域 = 操作 + 具体路由（含资源 ID）+ 操作者，避免同 key 跨资源/跨用户回放（D-T02-01/D-T02-04）
+		scopeKey := scope + ":" + r.URL.Path
 		if sess.StaffID != 0 {
 			scopeKey += ":staff:" + strconv.FormatInt(sess.StaffID, 10)
 		} else {

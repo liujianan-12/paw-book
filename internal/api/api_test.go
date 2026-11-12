@@ -652,6 +652,36 @@ func TestBearerTokenAndMockPay(t *testing.T) {
 	}
 }
 
+// 同一用户同一 Idempotency-Key 用在不同资源路径时不得回放（D-T02-04）。
+func TestIdempotencyScopePerRoute(t *testing.T) {
+	s, _ := newTestServer(t)
+	c := newClient(t, s)
+	c.login("u1")
+	c.login("mgr")
+
+	s1 := c.createSlot(3, 3)
+	s2 := c.createSlot(4, 3)
+	r1 := int64(decodeData(t, c.doAs("u1", "POST", "/api/reservations", map[string]any{"slotId": s1, "petId": 1}))["reservationId"].(float64))
+	r2 := int64(decodeData(t, c.doAs("u1", "POST", "/api/reservations", map[string]any{"slotId": s2, "petId": 2}))["reservationId"].(float64))
+
+	pay := func(id int64) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/reservations/%d/pay", id), nil)
+		req.Header.Set("Idempotency-Key", "same-key-different-route")
+		req.AddCookie(&http.Cookie{Name: "pb_sid", Value: c.roles["u1"]})
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+	p1 := decodeData(t, pay(r1))
+	p2 := decodeData(t, pay(r2))
+	if p1["paymentId"] == p2["paymentId"] {
+		t.Fatalf("不同预约复用同 key 不应回放同一支付单: %v vs %v", p1, p2)
+	}
+	if p2["orderNo"] == p1["orderNo"] {
+		t.Fatalf("不同预约应生成不同 orderNo: %v", p2)
+	}
+}
+
 // 审核拒绝分支单独覆盖（恢复已确认）。
 func TestRejectRestoresConfirmed(t *testing.T) {
 	s, _ := newTestServer(t)

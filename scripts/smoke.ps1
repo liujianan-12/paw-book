@@ -12,7 +12,10 @@ $env:TEACHING_CLOCK_BASE = '2026-11-14T06:00:00Z'
 $env:PAW_PAY_SECRET = 'smoke-secret'
 
 $log = Join-Path $env:TEMP ("paw-smoke-" + [guid]::NewGuid().ToString("N") + ".log")
-$proc = Start-Process -FilePath "go" -ArgumentList "run","./cmd/server" -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru -WindowStyle Hidden
+$exe = Join-Path $env:TEMP ("paw-smoke-" + [guid]::NewGuid().ToString("N") + ".exe")
+& go build -o $exe ./cmd/server
+if ($LASTEXITCODE -ne 0) { throw "构建服务失败" }
+$proc = Start-Process -FilePath $exe -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru -WindowStyle Hidden
 
 function Api($session, $method, $path, $body, $headers = @{}) {
   $params = @{ Uri = "$base$path"; Method = $method; WebSession = $session; Headers = $headers }
@@ -44,6 +47,7 @@ try {
     try { Invoke-RestMethod "$base/readyz" | Out-Null; $ready = $true; break } catch {}
   }
   if (-not $ready) { throw "服务未就绪，日志：$log / $log.err" }
+  if ($proc.HasExited) { throw "服务进程提前退出，日志：$log / $log.err" }
 
   $user = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   $mgr = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -75,6 +79,11 @@ try {
 
   "PASS 冒烟：slot=$($slot.slotId) reservation=$($res.reservationId) payment=$($pay.paymentId) 收入=$($daily.CompletedIncomeCents) 差额=$($daily.UnaccountedCents) 种子=$($smoke.stores)/$($smoke.staff)/$($smoke.slots)"
 } finally {
-  if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
-  Remove-Item $db, "$db-shm", "$db-wal", $log, "$log.err" -ErrorAction SilentlyContinue
+  if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+  # 兜底：按端口清理可能残留的子进程，保证冒烟可重复执行
+  Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Milliseconds 300
+  Remove-Item $db, "$db-shm", "$db-wal", $log, "$log.err", $exe -ErrorAction SilentlyContinue
 }
