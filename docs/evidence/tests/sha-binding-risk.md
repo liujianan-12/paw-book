@@ -37,3 +37,11 @@
 ## 其它 BLOCKED 项
 
 GitHub MCP 建仓、Meegle 编号（无权限 / 无应用，`#1001` 为占位编号）、教师部署环境、`-race` 无 gcc、S1–S5 录屏、AI 会话导出 / `events.jsonl` / 视频：见 `docs/pr-description.md`「BLOCKED / 未满足项」。
+
+## 本轮复核（2026-11-12，合并仍未发生）
+
+- `git checkout main` → `git pull origin main --ff-only` → `Already up to date.`（exit 0）；`git log --oneline -3 main` → `a92e5cd Initial commit`。
+- `git ls-remote --symref origin HEAD` → `ref: refs/heads/master HEAD`；`git remote show origin` → `HEAD branch: master`；远端默认分支仍为 `master`，与学生声明不一致。
+- `docs/evidence/git/main-protection.png` 截图 MISSING；保护规则证据不足，验收报告 G2 保持 BLOCKED。
+- GitHub MCP 保持 BLOCKED：`docs/evidence/git/mcp-github-BLOCKED.md`（三次工具检索 0 结果、未读取 token）。
+- **「验收 SHA ≠ 发布 SHA」风险仍成立**，上方「合并后待执行清单」全部待执行；本轮未创建 `<新SHA>` 证据目录、未改验收报告绑定 SHA 与统计、未伪造门禁输出。
