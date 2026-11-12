@@ -2,6 +2,7 @@
 // 仅用于教学演示与测试，不代表真实第三方支付接入。
 //
 // 用法示例：
+//
 //	POST /pay?behavior=fail&repeat=2&delay=1s
 //	{"out_trade_no":"T1001","amount_cents":9900,"notify_url":"http://localhost:8080/api/pay/notify"}
 package main
