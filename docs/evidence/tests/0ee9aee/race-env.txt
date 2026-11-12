@@ -1,0 +1,1 @@
+goVersion=go version go1.26.0 windows/amd64 CGO_ENABLED=0 CC=gcc gcc=MISSING note=详见 docs/evidence/git/race-attempt-2026-11-12.md；本次仍为 BLOCKED，不得写成 PASS

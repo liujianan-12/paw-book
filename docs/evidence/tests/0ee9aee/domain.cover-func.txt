@@ -1,0 +1,6 @@
+paw-book/internal/domain/errs.go:47:	Error		100.0%
+paw-book/internal/domain/errs.go:49:	Errf		100.0%
+paw-book/internal/domain/model.go:22:	OccupiesSlot	100.0%
+paw-book/internal/domain/model.go:31:	CanCancel	100.0%
+paw-book/internal/domain/model.go:34:	IsTerminal	100.0%
+total:					(statements)	100.0%

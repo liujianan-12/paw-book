@@ -1,0 +1,8 @@
+paw-book/internal/repo/repo.go:28:	BeginTx			100.0%
+paw-book/internal/repo/repo.go:40:	RealClock		100.0%
+paw-book/internal/repo/repo.go:43:	FmtTime			100.0%
+paw-book/internal/repo/repo.go:45:	ParseTime		100.0%
+paw-book/internal/repo/repo.go:49:	CheckStaff		90.0%
+paw-book/internal/repo/repo.go:68:	IsConstraintViolation	100.0%
+paw-book/internal/repo/repo.go:88:	Audit			100.0%
+total:					(statements)		96.7%

@@ -1,0 +1,18 @@
+race 环境与执行记录（复评整改，2026-11-12）
+
+环境：
+- MinGW-w64 via MSYS2（清华 TUNA 镜像 https://mirrors.tuna.tsinghua.edu.cn/msys2/，因 GitHub Releases 下载源 connection reset 不可达改用国内镜像）
+- 安装位置：D:\msys64（项目外目录）；包 mingw-w64-ucrt-x86_64-gcc 16.2.0-6
+- gcc 版本输出：gcc.exe (Rev6, Built by MSYS2 project) 16.2.0
+
+执行方式（PowerShell）：
+  $env:Path = "D:\msys64\ucrt64\bin;$env:Path"
+  $env:CGO_ENABLED = '1'
+  $env:CC = 'gcc'
+  go test -race ./... -count=1
+
+结果：见 race-final.txt —— 全部包 ok，无数据竞争（internal/api 8.4s、internal/domain 1.5s、
+internal/paychannel 1.5s、internal/payclient 2.3s、internal/repo 4.3s、internal/service 24.5s）。
+
+备注：此前 race.txt 记录的 BLOCKED（无 gcc、GitHub 下载源不通）已按 docs/assumptions.md 0.1 决策
+「Windows 本机装 MinGW-w64 便携版后执行」解除；本文件与 race-final.txt 即环境输出与结果原件。

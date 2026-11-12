@@ -2,7 +2,7 @@
 name: acceptance-audit
 description: 验收检查 Skill。依据题目原文逐项核对宠物门店预约项目的实现、异常路径、权限、覆盖率、Git/部署证据与 AI 过程记录，输出逐项 PASS/FAIL/BLOCKED，不修改任何代码。
 version: 0.1.0
-owner: <学生姓名>
+owner: 刘迦南
 ---
 
 # acceptance-audit（独立验收检查）

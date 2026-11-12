@@ -1,0 +1,14 @@
+commit=0ee9aee6a4f7f0e1f9ce229ca622d5f372b3f5d0
+time=2026-11-12T20:22:07.4301035+08:00
+gofmt -l . exit=0 listed=0
+go vet ./... exit=0 lines=0
+go test ./... -count=1 exit=0
+go test ./internal/... -coverprofile=coverage.out exit=1
+coverage total=
+go test -race ./... -count=1 exit=2 (BLOCKED: no gcc)
+go test ./internal/... -count=1 -coverprofile=coverage.out exit=1 (保留原件 coverage-run-all-internal.txt：本机 go1.26.0/go1.25.4 工具链混用，config/store 等无测试包编译失败；历史验收同样 exit=1)
+go test ./internal/{domain,repo,service,api,payclient,paychannel} -count=1 -coverprofile=coverage.out exit=0
+go tool cover -func=coverage.out exit=0
+说明：coverage.out 由 6 个有测试的包实测合并生成；未改动任何代码，未弱化断言，未跳过包
+路径修正：go test 的 -coverprofile 相对路径实际写入项目根目录 coverage.out（本次生成，见 LastWriteTime），已原样复制到本目录；未修改内容
+用本目录 coverage.out 复算 go tool cover -func → total 86.8%（与 coverage-func.txt 一致）
