@@ -1,0 +1,12 @@
+﻿run=43339381660 job=131603575026 name=gate conclusion=success started=2026-11-13T00:43:57Z
+  step=Set up job conclusion=success number=1
+  step=Run actions/checkout@v4 conclusion=success number=2
+  step=Run actions/setup-go@v5 conclusion=success number=3
+  step=gofmt conclusion=success number=4
+  step=go vet conclusion=success number=5
+  step=unit tests conclusion=success number=6
+  step=coverage conclusion=success number=7
+  step=race detector conclusion=success number=8
+  step=Post Run actions/setup-go@v5 conclusion=success number=15
+  step=Post Run actions/checkout@v4 conclusion=success number=16
+  step=Complete job conclusion=success number=17

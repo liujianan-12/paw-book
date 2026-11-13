@@ -1,0 +1,381 @@
+﻿2026-11-13T00:43:57.8252191Z Current runner version: '2.338.2'
+2026-11-13T00:43:57.8270256Z ##[group]Runner Image Provisioner
+2026-11-13T00:43:57.8270977Z Hosted Compute Agent
+2026-11-13T00:43:57.8271504Z Version: 20261028.624
+2026-11-13T00:43:57.8272060Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+2026-11-13T00:43:57.8273014Z Build Date: 2026-10-28T21:51:42Z
+2026-11-13T00:43:57.8273633Z Worker ID: {471620be-8917-46c0-b868-cef2147409ce}
+2026-11-13T00:43:57.8274216Z Region: centralus
+2026-11-13T00:43:57.8274659Z Cloud: Azure
+2026-11-13T00:43:57.8275183Z ##[endgroup]
+2026-11-13T00:43:57.8276319Z ##[group]Operating System
+2026-11-13T00:43:57.8276843Z Ubuntu
+2026-11-13T00:43:57.8277284Z 26.04.1
+2026-11-13T00:43:57.8277697Z LTS
+2026-11-13T00:43:57.8278184Z ##[endgroup]
+2026-11-13T00:43:57.8278632Z ##[group]Runner Image
+2026-11-13T00:43:57.8279130Z Image: ubuntu-26.04
+2026-11-13T00:43:57.8279613Z Version: 20261101.186.1
+2026-11-13T00:43:57.8280690Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261101.186/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-13T00:43:57.8281941Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261101.186
+2026-11-13T00:43:57.8283172Z ##[endgroup]
+2026-11-13T00:43:57.8284215Z ##[group]GITHUB_TOKEN Permissions
+2026-11-13T00:43:57.8285916Z Contents: read
+2026-11-13T00:43:57.8286426Z Metadata: read
+2026-11-13T00:43:57.8286871Z Packages: read
+2026-11-13T00:43:57.8287357Z ##[endgroup]
+2026-11-13T00:43:57.8290023Z Secret source: Actions
+2026-11-13T00:43:57.8291174Z Cache mode: write
+2026-11-13T00:43:57.8292348Z Prepare workflow directory
+2026-11-13T00:43:57.8566847Z Prepare all required actions
+2026-11-13T00:43:57.8607851Z Getting action download info
+2026-11-13T00:43:58.0806744Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-13T00:43:58.2014242Z Download action repository 'actions/setup-go@v5' (SHA:40f1582b2485089dde7abd97c1529aa768e1baff)
+2026-11-13T00:43:58.6363805Z Complete job name: gate
+2026-11-13T00:43:58.7015672Z ##[group]Run actions/checkout@v4
+2026-11-13T00:43:58.7016481Z with:
+2026-11-13T00:43:58.7016944Z   repository: liujianan-12/paw-book
+2026-11-13T00:43:58.7020237Z   token: ***
+2026-11-13T00:43:58.7020704Z   ssh-strict: true
+2026-11-13T00:43:58.7021159Z   ssh-user: git
+2026-11-13T00:43:58.7021630Z   persist-credentials: true
+2026-11-13T00:43:58.7022100Z   clean: true
+2026-11-13T00:43:58.7022538Z   sparse-checkout-cone-mode: true
+2026-11-13T00:43:58.7023281Z   fetch-depth: 1
+2026-11-13T00:43:58.7023715Z   fetch-tags: false
+2026-11-13T00:43:58.7024171Z   show-progress: true
+2026-11-13T00:43:58.7024603Z   lfs: false
+2026-11-13T00:43:58.7024993Z   submodules: false
+2026-11-13T00:43:58.7025476Z   set-safe-directory: true
+2026-11-13T00:43:58.7025992Z   allow-unsafe-pr-checkout: false
+2026-11-13T00:43:58.7026701Z ##[endgroup]
+2026-11-13T00:43:58.9725458Z Syncing repository: liujianan-12/paw-book
+2026-11-13T00:43:58.9727799Z ##[group]Getting Git version info
+2026-11-13T00:43:58.9728584Z Working directory is '/home/runner/work/paw-book/paw-book'
+2026-11-13T00:43:58.9729581Z [command]/usr/bin/git version
+2026-11-13T00:43:58.9731601Z git version 2.56.0
+2026-11-13T00:43:58.9748340Z ##[endgroup]
+2026-11-13T00:43:58.9759350Z Temporarily overriding HOME='/home/runner/work/_temp/5de15d96-0146-4b7b-9ea7-7e7939ca57bc' before making global git config changes
+2026-11-13T00:43:58.9761090Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-13T00:43:58.9763291Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/paw-book/paw-book
+2026-11-13T00:43:58.9829064Z Deleting the contents of '/home/runner/work/paw-book/paw-book'
+2026-11-13T00:43:58.9830560Z ##[group]Initializing the repository
+2026-11-13T00:43:58.9831478Z [command]/usr/bin/git init /home/runner/work/paw-book/paw-book
+2026-11-13T00:43:58.9918504Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-13T00:43:58.9919713Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-13T00:43:58.9920689Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-13T00:43:58.9921375Z hint: call:
+2026-11-13T00:43:58.9922029Z hint:
+2026-11-13T00:43:58.9922554Z hint: 	git config --global init.defaultBranch <name>
+2026-11-13T00:43:58.9923300Z hint:
+2026-11-13T00:43:58.9923875Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-13T00:43:58.9924787Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-13T00:43:58.9925534Z hint:
+2026-11-13T00:43:58.9925988Z hint: 	git branch -m <name>
+2026-11-13T00:43:58.9926460Z hint:
+2026-11-13T00:43:58.9927040Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-13T00:43:58.9933435Z Initialized empty Git repository in /home/runner/work/paw-book/paw-book/.git/
+2026-11-13T00:43:58.9942435Z [command]/usr/bin/git remote add origin https://github.com/liujianan-12/paw-book
+2026-11-13T00:43:58.9985601Z ##[endgroup]
+2026-11-13T00:43:58.9986662Z ##[group]Disabling automatic garbage collection
+2026-11-13T00:43:58.9989845Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-13T00:43:59.0015104Z ##[endgroup]
+2026-11-13T00:43:59.0016115Z ##[group]Setting up auth
+2026-11-13T00:43:59.0021325Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-13T00:43:59.0046117Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-13T00:43:59.0436783Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-13T00:43:59.0509923Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-13T00:43:59.0713908Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-13T00:43:59.0738080Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-13T00:43:59.0922341Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-13T00:43:59.0950447Z ##[endgroup]
+2026-11-13T00:43:59.0951699Z ##[group]Fetching the repository
+2026-11-13T00:43:59.0958627Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +05fcb7152b8627edabd99e2b26f3b7db31c51528:refs/remotes/origin/main
+2026-11-13T00:43:59.5475210Z From https://github.com/liujianan-12/paw-book
+2026-11-13T00:43:59.5477408Z  * [new ref]         05fcb7152b8627edabd99e2b26f3b7db31c51528 -> origin/main
+2026-11-13T00:43:59.5481537Z ##[endgroup]
+2026-11-13T00:43:59.5483273Z ##[group]Determining the checkout info
+2026-11-13T00:43:59.5485248Z ##[endgroup]
+2026-11-13T00:43:59.5486357Z [command]/usr/bin/git sparse-checkout disable
+2026-11-13T00:43:59.5535158Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-13T00:43:59.5557577Z ##[group]Checking out the ref
+2026-11-13T00:43:59.5559589Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-13T00:43:59.5706018Z Switched to a new branch 'main'
+2026-11-13T00:43:59.5712958Z branch 'main' set up to track 'origin/main'.
+2026-11-13T00:43:59.5716420Z ##[endgroup]
+2026-11-13T00:43:59.5747669Z [command]/usr/bin/git log -1 --format=%H
+2026-11-13T00:43:59.5764586Z 05fcb7152b8627edabd99e2b26f3b7db31c51528
+2026-11-13T00:43:59.6062394Z ##[group]Run actions/setup-go@v5
+2026-11-13T00:43:59.6063597Z with:
+2026-11-13T00:43:59.6064478Z   go-version-file: go.mod
+2026-11-13T00:43:59.6065397Z   cache: true
+2026-11-13T00:43:59.6066211Z   check-latest: false
+2026-11-13T00:43:59.6074530Z   token: ***
+2026-11-13T00:43:59.6075334Z ##[endgroup]
+2026-11-13T00:43:59.7165506Z Setup go version spec 1.26.0
+2026-11-13T00:43:59.7174015Z Attempting to download 1.26.0...
+2026-11-13T00:43:59.7312376Z (node:2193) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T00:43:59.7315229Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T00:44:00.3406325Z matching 1.26.0...
+2026-11-13T00:44:00.3442526Z Acquiring 1.26.0 from https://github.com/actions/go-versions/releases/download/1.26.0-21889650668/go-1.26.0-linux-x64.tar.gz
+2026-11-13T00:44:00.9051608Z Extracting Go...
+2026-11-13T00:44:00.9130758Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/5f60db8e-a58a-4153-8e4b-80041e8d213d -f /home/runner/work/_temp/187b6b88-7b10-4a44-845e-207edc7cdcae
+2026-11-13T00:44:01.7752101Z Successfully extracted go to /home/runner/work/_temp/5f60db8e-a58a-4153-8e4b-80041e8d213d
+2026-11-13T00:44:01.7758977Z Adding to the cache ...
+2026-11-13T00:44:05.3270401Z Successfully cached go to /opt/hostedtoolcache/go/1.26.0/x64
+2026-11-13T00:44:05.3274298Z Added go to the path
+2026-11-13T00:44:05.3275366Z Successfully set up Go version 1.26.0
+2026-11-13T00:44:05.3449061Z [command]/opt/hostedtoolcache/go/1.26.0/x64/bin/go env GOMODCACHE
+2026-11-13T00:44:05.3474241Z [command]/opt/hostedtoolcache/go/1.26.0/x64/bin/go env GOCACHE
+2026-11-13T00:44:05.3499419Z /home/runner/go/pkg/mod
+2026-11-13T00:44:05.3517426Z /home/runner/.cache/go-build
+2026-11-13T00:44:05.4935778Z Cache hit for: setup-go-Linux-x64-ubuntu26-go-1.26.0-340d13d9fe3a5755931ce7a932c9a3144c7421f82d3292e18a968c44203cc517
+2026-11-13T00:44:05.5010323Z (node:2193) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-13T00:44:06.6363690Z Received 142606336 of 189767963 (75.1%), 135.9 MBs/sec
+2026-11-13T00:44:06.7769224Z Received 189767963 of 189767963 (100.0%), 158.6 MBs/sec
+2026-11-13T00:44:06.7770234Z Cache Size: ~181 MB (189767963 B)
+2026-11-13T00:44:06.7794579Z [command]/usr/bin/tar -xf /home/runner/work/_temp/16916f63-a090-4a44-91a5-e3febe6998ff/cache.tzst -P -C /home/runner/work/paw-book/paw-book --use-compress-program unzstd
+2026-11-13T00:44:07.6186631Z Cache restored successfully
+2026-11-13T00:44:07.6248493Z Cache restored from key: setup-go-Linux-x64-ubuntu26-go-1.26.0-340d13d9fe3a5755931ce7a932c9a3144c7421f82d3292e18a968c44203cc517
+2026-11-13T00:44:07.6277794Z go version go1.26.0 linux/amd64
+2026-11-13T00:44:07.6278178Z 
+2026-11-13T00:44:07.6278649Z ##[group]go env
+2026-11-13T00:44:07.6414563Z AR='ar'
+2026-11-13T00:44:07.6415156Z CC='gcc'
+2026-11-13T00:44:07.6415643Z CGO_CFLAGS='-O2 -g'
+2026-11-13T00:44:07.6416032Z CGO_CPPFLAGS=''
+2026-11-13T00:44:07.6416437Z CGO_CXXFLAGS='-O2 -g'
+2026-11-13T00:44:07.6416819Z CGO_ENABLED='1'
+2026-11-13T00:44:07.6417152Z CGO_FFLAGS='-O2 -g'
+2026-11-13T00:44:07.6417533Z CGO_LDFLAGS='-O2 -g'
+2026-11-13T00:44:07.6417926Z CXX='g++'
+2026-11-13T00:44:07.6418272Z GCCGO='gccgo'
+2026-11-13T00:44:07.6418663Z GO111MODULE=''
+2026-11-13T00:44:07.6418980Z GOAMD64='v1'
+2026-11-13T00:44:07.6419339Z GOARCH='amd64'
+2026-11-13T00:44:07.6419737Z GOAUTH='netrc'
+2026-11-13T00:44:07.6420073Z GOBIN=''
+2026-11-13T00:44:07.6420446Z GOCACHE='/home/runner/.cache/go-build'
+2026-11-13T00:44:07.6420841Z GOCACHEPROG=''
+2026-11-13T00:44:07.6421229Z GODEBUG=''
+2026-11-13T00:44:07.6421582Z GOENV='/home/runner/.config/go/env'
+2026-11-13T00:44:07.6422022Z GOEXE=''
+2026-11-13T00:44:07.6422339Z GOEXPERIMENT=''
+2026-11-13T00:44:07.6422706Z GOFIPS140='off'
+2026-11-13T00:44:07.6423245Z GOFLAGS=''
+2026-11-13T00:44:07.6424445Z GOGCCFLAGS='-fPIC -m64 -pthread -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=/tmp/go-build628998437=/tmp/go-build -gno-record-gcc-switches'
+2026-11-13T00:44:07.6425368Z GOHOSTARCH='amd64'
+2026-11-13T00:44:07.6425736Z GOHOSTOS='linux'
+2026-11-13T00:44:07.6426082Z GOINSECURE=''
+2026-11-13T00:44:07.6426492Z GOMOD='/home/runner/work/paw-book/paw-book/go.mod'
+2026-11-13T00:44:07.6427115Z GOMODCACHE='/home/runner/go/pkg/mod'
+2026-11-13T00:44:07.6427564Z GONOPROXY=''
+2026-11-13T00:44:07.6427887Z GONOSUMDB=''
+2026-11-13T00:44:07.6428207Z GOOS='linux'
+2026-11-13T00:44:07.6428535Z GOPATH='/home/runner/go'
+2026-11-13T00:44:07.6428926Z GOPRIVATE=''
+2026-11-13T00:44:07.6429372Z GOPROXY='https://proxy.golang.org,direct'
+2026-11-13T00:44:07.6429837Z GOROOT='/opt/hostedtoolcache/go/1.26.0/x64'
+2026-11-13T00:44:07.6430293Z GOSUMDB='sum.golang.org'
+2026-11-13T00:44:07.6430713Z GOTELEMETRY='local'
+2026-11-13T00:44:07.6431119Z GOTELEMETRYDIR='/home/runner/.config/go/telemetry'
+2026-11-13T00:44:07.6431597Z GOTMPDIR=''
+2026-11-13T00:44:07.6432016Z GOTOOLCHAIN='auto'
+2026-11-13T00:44:07.6432563Z GOTOOLDIR='/opt/hostedtoolcache/go/1.26.0/x64/pkg/tool/linux_amd64'
+2026-11-13T00:44:07.6433230Z GOVCS=''
+2026-11-13T00:44:07.6433570Z GOVERSION='go1.26.0'
+2026-11-13T00:44:07.6433956Z GOWORK=''
+2026-11-13T00:44:07.6434341Z PKG_CONFIG='pkg-config'
+2026-11-13T00:44:07.6434535Z 
+2026-11-13T00:44:07.6435030Z ##[endgroup]
+2026-11-13T00:44:07.6616366Z ##[group]Run test -z "$(gofmt -l .)"
+2026-11-13T00:44:07.6616818Z [36;1mtest -z "$(gofmt -l .)"[0m
+2026-11-13T00:44:07.6650697Z shell: /usr/bin/bash -e {0}
+2026-11-13T00:44:07.6651042Z ##[endgroup]
+2026-11-13T00:44:07.6919772Z ##[group]Run go vet ./...
+2026-11-13T00:44:07.6920110Z [36;1mgo vet ./...[0m
+2026-11-13T00:44:07.6943398Z shell: /usr/bin/bash -e {0}
+2026-11-13T00:44:07.6943809Z ##[endgroup]
+2026-11-13T00:44:07.8361298Z ##[group]Run go test ./... -count=1
+2026-11-13T00:44:07.8361661Z [36;1mgo test ./... -count=1[0m
+2026-11-13T00:44:07.8384415Z shell: /usr/bin/bash -e {0}
+2026-11-13T00:44:07.8384820Z ##[endgroup]
+2026-11-13T00:44:07.9219172Z ?   	paw-book/cmd/audit	[no test files]
+2026-11-13T00:44:07.9221238Z ?   	paw-book/cmd/migrate	[no test files]
+2026-11-13T00:44:07.9221700Z ?   	paw-book/cmd/paychannel	[no test files]
+2026-11-13T00:44:07.9222572Z ?   	paw-book/cmd/server	[no test files]
+2026-11-13T00:44:09.0845176Z ok  	paw-book/internal/api	0.835s
+2026-11-13T00:44:09.0846020Z ?   	paw-book/internal/config	[no test files]
+2026-11-13T00:44:09.0850549Z ok  	paw-book/internal/domain	0.002s
+2026-11-13T00:44:09.0851550Z ok  	paw-book/internal/paychannel	0.002s
+2026-11-13T00:44:09.0852240Z ok  	paw-book/internal/payclient	0.005s
+2026-11-13T00:44:09.0853439Z ok  	paw-book/internal/repo	0.067s
+2026-11-13T00:44:10.8210365Z ok  	paw-book/internal/service	2.509s
+2026-11-13T00:44:10.8211841Z ?   	paw-book/internal/store	[no test files]
+2026-11-13T00:44:10.8215687Z ?   	paw-book/migrations	[no test files]
+2026-11-13T00:44:10.8296114Z ##[group]Run go test ./... -coverprofile=coverage.out
+2026-11-13T00:44:10.8296576Z [36;1mgo test ./... -coverprofile=coverage.out[0m
+2026-11-13T00:44:10.8296961Z [36;1mgo tool cover -func=coverage.out[0m
+2026-11-13T00:44:10.8327755Z shell: /usr/bin/bash -e {0}
+2026-11-13T00:44:10.8328087Z ##[endgroup]
+2026-11-13T00:44:11.1384215Z 	paw-book/cmd/audit		coverage: 0.0% of statements
+2026-11-13T00:44:11.1546951Z 	paw-book/cmd/migrate		coverage: 0.0% of statements
+2026-11-13T00:44:11.1548513Z 	paw-book/cmd/paychannel		coverage: 0.0% of statements
+2026-11-13T00:44:11.1573942Z 	paw-book/cmd/server		coverage: 0.0% of statements
+2026-11-13T00:44:11.1592139Z ok  	paw-book/internal/api	(cached)	coverage: 88.1% of statements
+2026-11-13T00:44:11.2528083Z 	paw-book/internal/config		coverage: 0.0% of statements
+2026-11-13T00:44:11.2529033Z ok  	paw-book/internal/domain	(cached)	coverage: 100.0% of statements
+2026-11-13T00:44:11.2530592Z ok  	paw-book/internal/paychannel	(cached)	coverage: 100.0% of statements
+2026-11-13T00:44:11.2531430Z ok  	paw-book/internal/payclient	(cached)	coverage: 88.5% of statements
+2026-11-13T00:44:11.2532455Z ok  	paw-book/internal/repo	(cached)	coverage: 96.7% of statements
+2026-11-13T00:44:11.2533466Z ok  	paw-book/internal/service	(cached)	coverage: 85.2% of statements
+2026-11-13T00:44:11.2534319Z 	paw-book/internal/store		coverage: 0.0% of statements
+2026-11-13T00:44:11.2535011Z ?   	paw-book/migrations	[no test files]
+2026-11-13T00:44:11.3461511Z paw-book/cmd/audit/main.go:36:			main			0.0%
+2026-11-13T00:44:11.3462251Z paw-book/cmd/audit/main.go:131:			splitStatements		0.0%
+2026-11-13T00:44:11.3463204Z paw-book/cmd/migrate/main.go:13:		main			0.0%
+2026-11-13T00:44:11.3464549Z paw-book/cmd/paychannel/main.go:20:		main			0.0%
+2026-11-13T00:44:11.3465417Z paw-book/cmd/paychannel/main.go:32:		handle			0.0%
+2026-11-13T00:44:11.3466040Z paw-book/cmd/paychannel/main.go:69:		scheduleNotify		0.0%
+2026-11-13T00:44:11.3466673Z paw-book/cmd/paychannel/main.go:85:		writeJSON		0.0%
+2026-11-13T00:44:11.3467363Z paw-book/cmd/server/main.go:19:			main			0.0%
+2026-11-13T00:44:11.3467976Z paw-book/cmd/server/main.go:63:			buildClock		0.0%
+2026-11-13T00:44:11.3468589Z paw-book/internal/api/handlers.go:15:		handleSlots		81.8%
+2026-11-13T00:44:11.3469248Z paw-book/internal/api/handlers.go:33:		handleCreateSlot	95.0%
+2026-11-13T00:44:11.3470087Z paw-book/internal/api/handlers.go:71:		handleCreateReservation	90.9%
+2026-11-13T00:44:11.3470781Z paw-book/internal/api/handlers.go:97:		handlePay		91.7%
+2026-11-13T00:44:11.3471411Z paw-book/internal/api/handlers.go:119:		handlePayNotify		87.5%
+2026-11-13T00:44:11.3472067Z paw-book/internal/api/handlers.go:150:		handleMockPay		66.7%
+2026-11-13T00:44:11.3472945Z paw-book/internal/api/handlers.go:182:		handleRefundNotify	75.0%
+2026-11-13T00:44:11.3473472Z paw-book/internal/api/handlers.go:210:		handleCancel		81.5%
+2026-11-13T00:44:11.3474136Z paw-book/internal/api/handlers.go:253:		handleReservationDetail	83.3%
+2026-11-13T00:44:11.3474759Z paw-book/internal/api/handlers.go:280:		handleMyReservations	62.5%
+2026-11-13T00:44:11.3475383Z paw-book/internal/api/handlers.go:294:		handleCheckIn		100.0%
+2026-11-13T00:44:11.3475914Z paw-book/internal/api/handlers.go:313:		handleStart		100.0%
+2026-11-13T00:44:11.3476493Z paw-book/internal/api/handlers.go:332:		handleComplete		91.7%
+2026-11-13T00:44:11.3477060Z paw-book/internal/api/handlers.go:351:		handleCancelRequests	62.5%
+2026-11-13T00:44:11.3477594Z paw-book/internal/api/handlers.go:365:		handleApprove		76.9%
+2026-11-13T00:44:11.3478191Z paw-book/internal/api/handlers.go:387:		handleReject		76.9%
+2026-11-13T00:44:11.3478639Z paw-book/internal/api/handlers.go:409:		handleRefunds		66.7%
+2026-11-13T00:44:11.3479044Z paw-book/internal/api/handlers.go:424:		handleRetryRefund	83.3%
+2026-11-13T00:44:11.3479502Z paw-book/internal/api/handlers.go:443:		handleNoShow		92.9%
+2026-11-13T00:44:11.3479931Z paw-book/internal/api/handlers.go:467:		handleDaily		86.7%
+2026-11-13T00:44:11.3480593Z paw-book/internal/api/handlers.go:490:		handleSmoke		100.0%
+2026-11-13T00:44:11.3480999Z paw-book/internal/api/handlers.go:506:		handleReady		100.0%
+2026-11-13T00:44:11.3481394Z paw-book/internal/api/pages.go:12:		pages			76.9%
+2026-11-13T00:44:11.3481814Z paw-book/internal/api/server.go:48:		New			66.7%
+2026-11-13T00:44:11.3482181Z paw-book/internal/api/server.go:57:		Handler			100.0%
+2026-11-13T00:44:11.3482580Z paw-book/internal/api/server.go:102:		handleLogin		100.0%
+2026-11-13T00:44:11.3483113Z paw-book/internal/api/server.go:142:		handleLogout		100.0%
+2026-11-13T00:44:11.3483578Z paw-book/internal/api/server.go:158:		bearerToken		100.0%
+2026-11-13T00:44:11.3483976Z paw-book/internal/api/server.go:166:		handleMe		100.0%
+2026-11-13T00:44:11.3484364Z paw-book/internal/api/server.go:180:		sessionOf		100.0%
+2026-11-13T00:44:11.3484751Z paw-book/internal/api/server.go:197:		require			100.0%
+2026-11-13T00:44:11.3485158Z paw-book/internal/api/server.go:221:		idem			88.1%
+2026-11-13T00:44:11.3485532Z paw-book/internal/api/server.go:292:		Header			100.0%
+2026-11-13T00:44:11.3485918Z paw-book/internal/api/server.go:293:		WriteHeader		100.0%
+2026-11-13T00:44:11.3486315Z paw-book/internal/api/server.go:294:		Write			100.0%
+2026-11-13T00:44:11.3486695Z paw-book/internal/api/server.go:300:		decode			100.0%
+2026-11-13T00:44:11.3487079Z paw-book/internal/api/server.go:309:		writeOK			100.0%
+2026-11-13T00:44:11.3487452Z paw-book/internal/api/server.go:313:		writeJSON		100.0%
+2026-11-13T00:44:11.3487859Z paw-book/internal/api/server.go:320:		writeErr		94.1%
+2026-11-13T00:44:11.3488310Z paw-book/internal/api/server.go:353:		idParam			100.0%
+2026-11-13T00:44:11.3488708Z paw-book/internal/api/server.go:357:		randToken		100.0%
+2026-11-13T00:44:11.3489097Z paw-book/internal/api/server.go:364:		sign			100.0%
+2026-11-13T00:44:11.3489535Z paw-book/internal/api/server.go:370:		verifySignature		100.0%
+2026-11-13T00:44:11.3489930Z paw-book/internal/config/config.go:23:		Load			0.0%
+2026-11-13T00:44:11.3490280Z paw-book/internal/config/config.go:37:		env			0.0%
+2026-11-13T00:44:11.3490711Z paw-book/internal/config/config.go:44:		durationEnv		0.0%
+2026-11-13T00:44:11.3491169Z paw-book/internal/domain/errs.go:47:		Error			100.0%
+2026-11-13T00:44:11.3491544Z paw-book/internal/domain/errs.go:49:		Errf			100.0%
+2026-11-13T00:44:11.3491929Z paw-book/internal/domain/model.go:22:		OccupiesSlot		100.0%
+2026-11-13T00:44:11.3492361Z paw-book/internal/domain/model.go:31:		CanCancel		100.0%
+2026-11-13T00:44:11.3492943Z paw-book/internal/domain/model.go:34:		IsTerminal		100.0%
+2026-11-13T00:44:11.3493395Z paw-book/internal/paychannel/behavior.go:34:	ParseOptions		100.0%
+2026-11-13T00:44:11.3493826Z paw-book/internal/payclient/client.go:24:	New			100.0%
+2026-11-13T00:44:11.3494237Z paw-book/internal/payclient/client.go:43:	Pay			100.0%
+2026-11-13T00:44:11.3494930Z paw-book/internal/payclient/client.go:48:	Refund			100.0%
+2026-11-13T00:44:11.3495378Z paw-book/internal/payclient/client.go:52:	post			81.2%
+2026-11-13T00:44:11.3495824Z paw-book/internal/payclient/client.go:77:	buildQuery		100.0%
+2026-11-13T00:44:11.3496314Z paw-book/internal/repo/repo.go:28:		BeginTx			100.0%
+2026-11-13T00:44:11.3496690Z paw-book/internal/repo/repo.go:40:		RealClock		100.0%
+2026-11-13T00:44:11.3497062Z paw-book/internal/repo/repo.go:43:		FmtTime			100.0%
+2026-11-13T00:44:11.3497499Z paw-book/internal/repo/repo.go:45:		ParseTime		100.0%
+2026-11-13T00:44:11.3497854Z paw-book/internal/repo/repo.go:49:		CheckStaff		90.0%
+2026-11-13T00:44:11.3498288Z paw-book/internal/repo/repo.go:68:		IsConstraintViolation	100.0%
+2026-11-13T00:44:11.3498727Z paw-book/internal/repo/repo.go:88:		Audit			100.0%
+2026-11-13T00:44:11.3499158Z paw-book/internal/service/cancel.go:22:		CancelReservation	81.4%
+2026-11-13T00:44:11.3499584Z paw-book/internal/service/cancel.go:125:	ReviewCancel		81.8%
+2026-11-13T00:44:11.3500010Z paw-book/internal/service/cancel.go:208:	refundOfReservation	100.0%
+2026-11-13T00:44:11.3500517Z paw-book/internal/service/cancel.go:235:	ListCancelRequests	94.1%
+2026-11-13T00:44:11.3501075Z paw-book/internal/service/checkin.go:14:	reservationStoreStatus	100.0%
+2026-11-13T00:44:11.3501581Z paw-book/internal/service/checkin.go:29:	hasPendingCancel	100.0%
+2026-11-13T00:44:11.3502005Z paw-book/internal/service/checkin.go:41:	CheckIn			81.6%
+2026-11-13T00:44:11.3502467Z paw-book/internal/service/checkin.go:112:	StartService		88.9%
+2026-11-13T00:44:11.3503141Z paw-book/internal/service/checkin.go:168:	CompleteService		85.7%
+2026-11-13T00:44:11.3503607Z paw-book/internal/service/daily.go:57:		GetDailyReport		85.7%
+2026-11-13T00:44:11.3504079Z paw-book/internal/service/noshow.go:16:		MarkNoShow		88.9%
+2026-11-13T00:44:11.3504492Z paw-book/internal/service/pay.go:16:		CreatePayment		81.4%
+2026-11-13T00:44:11.3504913Z paw-book/internal/service/pay.go:102:		HandlePayNotify		85.4%
+2026-11-13T00:44:11.3505339Z paw-book/internal/service/pay.go:182:		applyPaySuccess		69.6%
+2026-11-13T00:44:11.3505789Z paw-book/internal/service/refund.go:15:		ensureRefund		100.0%
+2026-11-13T00:44:11.3506245Z paw-book/internal/service/refund.go:43:		HandleRefundNotify	82.8%
+2026-11-13T00:44:11.3506677Z paw-book/internal/service/refund.go:93:		RetryRefund		84.6%
+2026-11-13T00:44:11.3507082Z paw-book/internal/service/refund.go:152:	ListRefunds		92.9%
+2026-11-13T00:44:11.3507572Z paw-book/internal/service/reservation.go:25:	CreateReservation	81.5%
+2026-11-13T00:44:11.3508044Z paw-book/internal/service/reservation.go:122:	CancelUnpaid		87.0%
+2026-11-13T00:44:11.3508517Z paw-book/internal/service/reservation.go:181:	GetReservation		92.3%
+2026-11-13T00:44:11.3509054Z paw-book/internal/service/reservation.go:236:	ListMyReservations	81.8%
+2026-11-13T00:44:11.3509499Z paw-book/internal/service/slot.go:24:		CreateSlot		90.0%
+2026-11-13T00:44:11.3509925Z paw-book/internal/service/slot.go:68:		ListAvailableSlots	84.2%
+2026-11-13T00:44:11.3510327Z paw-book/internal/service/slot.go:101:		slotByID		91.7%
+2026-11-13T00:44:11.3510759Z paw-book/internal/service/sweep.go:14:		SweepExpired		84.6%
+2026-11-13T00:44:11.3511160Z paw-book/internal/service/sweep.go:38:		expireSlotTx		100.0%
+2026-11-13T00:44:11.3511594Z paw-book/internal/service/sweep.go:44:		expireReservationTx	100.0%
+2026-11-13T00:44:11.3512038Z paw-book/internal/service/sweep.go:50:		expireRowsTx		84.6%
+2026-11-13T00:44:11.3512439Z paw-book/internal/store/store.go:21:		Open			0.0%
+2026-11-13T00:44:11.3513142Z paw-book/internal/store/store.go:37:		Migrate			0.0%
+2026-11-13T00:44:11.3513607Z paw-book/internal/store/store.go:65:		splitStatements		0.0%
+2026-11-13T00:44:11.3514094Z paw-book/internal/store/store.go:89:		SeedSlots		0.0%
+2026-11-13T00:44:11.3514457Z total:						(statements)		73.7%
+2026-11-13T00:44:11.3543212Z ##[group]Run go test -race ./... -count=1
+2026-11-13T00:44:11.3543590Z [36;1mgo test -race ./... -count=1[0m
+2026-11-13T00:44:11.3571926Z shell: /usr/bin/bash -e {0}
+2026-11-13T00:44:11.3572284Z ##[endgroup]
+2026-11-13T00:44:11.4408869Z ?   	paw-book/cmd/audit	[no test files]
+2026-11-13T00:44:11.4411716Z ?   	paw-book/cmd/migrate	[no test files]
+2026-11-13T00:44:11.4417398Z ?   	paw-book/cmd/paychannel	[no test files]
+2026-11-13T00:44:11.4417904Z ?   	paw-book/cmd/server	[no test files]
+2026-11-13T00:44:14.3628433Z ok  	paw-book/internal/api	2.405s
+2026-11-13T00:44:14.3628969Z ?   	paw-book/internal/config	[no test files]
+2026-11-13T00:44:14.3629353Z ok  	paw-book/internal/domain	1.013s
+2026-11-13T00:44:14.3629725Z ok  	paw-book/internal/paychannel	1.013s
+2026-11-13T00:44:14.3630103Z ok  	paw-book/internal/payclient	1.014s
+2026-11-13T00:44:14.3630470Z ok  	paw-book/internal/repo	1.171s
+2026-11-13T00:44:22.2653379Z ok  	paw-book/internal/service	9.217s
+2026-11-13T00:44:22.2654556Z ?   	paw-book/internal/store	[no test files]
+2026-11-13T00:44:22.2655186Z ?   	paw-book/migrations	[no test files]
+2026-11-13T00:44:22.2806257Z Post job cleanup.
+2026-11-13T00:44:22.3879391Z (node:2980) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-13T00:44:22.3880557Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-13T00:44:22.3920425Z [command]/opt/hostedtoolcache/go/1.26.0/x64/bin/go env GOMODCACHE
+2026-11-13T00:44:22.3985002Z [command]/opt/hostedtoolcache/go/1.26.0/x64/bin/go env GOCACHE
+2026-11-13T00:44:22.4006089Z /home/runner/go/pkg/mod
+2026-11-13T00:44:22.4017212Z /home/runner/.cache/go-build
+2026-11-13T00:44:22.4034561Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu26-go-1.26.0-340d13d9fe3a5755931ce7a932c9a3144c7421f82d3292e18a968c44203cc517, not saving cache.
+2026-11-13T00:44:22.4165868Z Post job cleanup.
+2026-11-13T00:44:22.4964750Z [command]/usr/bin/git version
+2026-11-13T00:44:22.4996465Z git version 2.56.0
+2026-11-13T00:44:22.5023614Z Temporarily overriding HOME='/home/runner/work/_temp/47e45995-96e9-4ad3-8c9c-3e4422dbe738' before making global git config changes
+2026-11-13T00:44:22.5025026Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-13T00:44:22.5029380Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/paw-book/paw-book
+2026-11-13T00:44:22.5058363Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-13T00:44:22.5086175Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-13T00:44:22.5301845Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-13T00:44:22.5318661Z http.https://github.com/.extraheader
+2026-11-13T00:44:22.5328111Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-13T00:44:22.5355569Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-13T00:44:22.5568421Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-13T00:44:22.5591973Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-13T00:44:22.5917828Z Cleaning up orphan processes
+2026-11-13T00:44:22.6173925Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-go@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
