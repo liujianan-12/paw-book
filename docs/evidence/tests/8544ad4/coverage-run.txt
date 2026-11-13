@@ -1,0 +1,12 @@
+﻿ok  	paw-book/internal/domain	1.809s	coverage: 100.0% of statements
+
+ok  	paw-book/internal/repo	2.749s	coverage: 96.7% of statements
+
+ok  	paw-book/internal/service	14.969s	coverage: 85.2% of statements
+
+ok  	paw-book/internal/api	4.945s	coverage: 88.1% of statements
+
+ok  	paw-book/internal/payclient	3.670s	coverage: 88.5% of statements
+
+ok  	paw-book/internal/paychannel	1.646s	coverage: 100.0% of statements
+
