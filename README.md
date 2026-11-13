@@ -79,3 +79,17 @@ Copy-Item -Recurse .\.agent, .\skills, .\AGENTS.md  <你的仓库路径>\
 ## 目录外说明
 
 本包生成的 `AGENTS.md` 已被当前会话识别为项目约束；实际提交时请把 `pet-store-booking/` 内的内容平铺到你的仓库根目录（即根目录下是 `AGENTS.md` 与 `.agent/`，而不是再套一层目录）。
+
+## 复评整改与证据索引（2026-11-13）
+
+| 证据 | 位置 |
+|---|---|
+| 最终交付主线 | GitHub PR#1 合并 `8544ad4`、PR#2 证据合并 `1f5263f`；`main` 与 `dev/02-pet-booking` 双远程同步，详见 [PR 与合并记录](docs/evidence/git/pr-merge-2026-11-13.md) |
+| race 环境解除 BLOCKED | [race-final.txt](docs/evidence/tests/0ee9aee/race-final.txt)、[race-env-final.txt](docs/evidence/tests/0ee9aee/race-env-final.txt)（MSYS2 MinGW-w64 / TUNA 镜像，`go test -race ./...` 全 PASS） |
+| 五组场景服务端全链路 | [scripts/scenarios.ps1](scripts/scenarios.ps1)、[scenarios-output.txt](docs/evidence/tests/0ee9aee/scenarios-output.txt)（含重启持久化、未到店、日清差额 0）；冒烟 [smoke.ps1](scripts/smoke.ps1) |
+| 最终提交测试/覆盖率 | [0ee9aee 目录](docs/evidence/tests/0ee9aee/)（total 86.8%，核心 4 包 ≥85%）；并发轮次口径 [concurrency-note.txt](docs/evidence/tests/0ee9aee/concurrency-note.txt) |
+| main 合并后门禁复跑 | [8544ad4 目录](docs/evidence/tests/8544ad4/)（gofmt/vet/go test/-race 全 PASS，coverage.out 原件 + total 86.8%） |
+| 独立验收（acceptance-audit） | [预验收报告](docs/acceptance/acceptance-report-6f92f4bb659abc15ca2c7d58c8e75087bb787b0a.md)（无 FAIL）；调用记录 [skill-usage.md](docs/skill-usage.md) |
+| 学生本人待办 | [student-todo-2026-11-13.md](docs/student-todo-2026-11-13.md)（视频/群截图/平台会话导出/Token 台账/Gitee PR/CI 部署/MCP/meegle） |
+
+平台/人工类证据按 `docs/assumptions.md` D4 如实标 BLOCKED，未伪造；AGENTS.md 版本记录（v0.1.0–v0.1.4）与维护人已回填。
