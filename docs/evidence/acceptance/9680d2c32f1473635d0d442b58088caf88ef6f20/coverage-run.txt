@@ -1,0 +1,343 @@
+﻿go : # paw-book/cmd/audit
+所在位置 C:\Users\ndkdl\AppData\Local\Temp\genie-ps-1794470606374-sgvlyy.ps1:954 字符: 126
++ ... mands.txt"; go test ./... -count=1 "-coverprofile=$((Get-Location).Pa ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (# paw-book/cmd/audit:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# paw-book/cmd/paychannel
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# paw-book/cmd/migrate
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# paw-book/cmd/server
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# paw-book/internal/store
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# paw-book/internal/config
+# internal/unsafeheader
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/runtime/pprof/label
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/profilerecord
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/uleb128
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/byteorder
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/asan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goos
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/godebugs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# cmp
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goarch
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/msan
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf8
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/calloc
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/syscall/windows/sysdll
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/coverage/rtcov
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# unicode/utf16
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# encoding
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# structs
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/trace/tracev2
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/goexperiment
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/nettrace
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# log/internal
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# math/bits
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# internal/cpu
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.4"
+ok  	paw-book/internal/api	6.814s	coverage: 88.1% of statements
+ok  	paw-book/internal/domain	1.168s	coverage: 100.0% of statements
+ok  	paw-book/internal/paychannel	1.669s	coverage: 100.0% of statements
+ok  	paw-book/internal/payclient	4.279s	coverage: 88.5% of statements
+ok  	paw-book/internal/repo	2.785s	coverage: 96.7% of statements
+ok  	paw-book/internal/service	17.189s	coverage: 85.2% of statements
+?   	paw-book/migrations	[no test files]

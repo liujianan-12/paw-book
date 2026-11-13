@@ -1,0 +1,15 @@
+paw-book 覆盖率门禁（2026-11-12，拆分后，本地 SQLite 临时库，D8）
+命令：go test ./internal/<pkg> -count=1 -coverprofile=docs/evidence/tests/local/<pkg>.cover
+
+package                   coverage   gate(>=85%)   evidence
+internal/domain           100.0%     PASS          domain.cover
+internal/repo              96.7%     PASS          repo.cover
+internal/service           85.1%     PASS          service.cover
+internal/api               88.9%     PASS          api.cover
+internal/paychannel       100.0%     PASS          test-output.txt
+internal/payclient         88.5%     PASS          test-output.txt
+
+全量：go test ./... -count=1 全绿（见 test-output.txt）。
+
+race：BLOCKED —— 本机无 gcc/MinGW，CGO_ENABLED=0，go test -race 无法执行（E1）。
+     原始尝试与结论见 race-env.txt；恢复环境后必须补跑并归档 race.txt。

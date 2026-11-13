@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>前台 · 核销</title><link rel="stylesheet" href="/app.css"></head>
+<body>
+<header><h1>前台核销</h1><span class="who" data-who></span><button onclick="PB.logout()">退出登录</button></header>
+<main>
+  <section class="card">
+    <h2>输入预约号核销 <span class="hint">仅“已确认”可核销；取消审核中会被拒绝</span></h2>
+    <div class="row">
+      <label for="rid">预约 ID</label>
+      <input id="rid" type="number" min="1" placeholder="例如 1" style="width:160px">
+      <button id="query">查看</button>
+      <button id="checkin" class="primary">核销到店</button>
+    </div>
+    <pre class="msg" id="msg">等待操作。</pre>
+  </section>
+  <section class="card">
+    <h2>预约信息</h2>
+    <table>
+      <thead><tr><th>ID</th><th>宠物</th><th>用户</th><th>时段</th><th>状态</th><th>金额</th></tr></thead>
+      <tbody id="detail"><tr><td class="empty" colspan="6">输入预约 ID 后查看</td></tr></tbody>
+    </table>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
+<script>
+const msg = document.getElementById('msg');
+const rid = () => Number(document.getElementById('rid').value);
+const fmt = t => t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-';
+
+async function query() {
+  const tb = document.getElementById('detail');
+  if (!rid()) return PB.toast('请输入预约 ID', true);
+  try {
+    const d = await PB.api('GET', '/api/reservations/' + rid());
+    tb.innerHTML = `<tr><td>#${d.ID}</td><td>${PB.esc(d.PetName)}</td><td>${PB.esc(d.UserName)}</td>
+      <td>${fmt(d.SlotStart)}</td><td>${PB.badge(d.Status)}</td><td>${PB.money(d.PriceCents)}</td></tr>`;
+    msg.textContent = '已加载预约 #' + d.ID;
+  } catch (e) { PB.empty(tb, 6, '加载失败：' + e.message); }
+}
+
+async function checkin() {
+  if (!rid()) return PB.toast('请输入预约 ID', true);
+  try {
+    const d = await PB.api('POST', '/api/reception/reservations/' + rid() + '/checkin');
+    msg.textContent = d.alreadyDone ? '该预约已核销（幂等，未新增记录）' : '核销成功：' + fmt(d.checkedInAt);
+    PB.toast(d.alreadyDone ? '已完成过核销' : '核销成功');
+    query();
+  } catch (e) { msg.textContent = '核销被拒绝：' + e.message; PB.toast('核销被拒绝：' + e.message, true); }
+}
+document.getElementById('query').onclick = query;
+document.getElementById('checkin').onclick = checkin;
+PB.requireLogin('reception').then(s => { if (s) query(); });
+</script>
+</body></html>

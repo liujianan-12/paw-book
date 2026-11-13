@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>paw-book · 登录（模拟）</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="login">
+  <div class="card">
+    <h1>paw-book 宠物洗护预约</h1>
+    <p class="muted" style="margin:0 0 18px">教学演示环境 · 模拟支付 · 密码均为 123456</p>
+    <form id="f">
+      <label for="account">账号</label>
+      <input id="account" value="u1" autocomplete="username" required>
+      <label for="password">密码</label>
+      <input id="password" type="password" value="123456" autocomplete="current-password" required>
+      <button class="primary" type="submit">登录</button>
+    </form>
+    <p id="err" class="badge bad" style="display:none;margin-top:12px"></p>
+    <p class="muted" style="margin-top:16px;font-size:12px">
+      演示账号：<b>u1</b> 宠物主人 · <b>rec</b> 前台 · <b>srv</b> 服务 · <b>cs1</b> 客服 · <b>mgr</b> 店长
+    </p>
+  </div>
+</div>
+<script src="/app.js"></script>
+<script>
+const err = document.getElementById('err');
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  err.style.display = 'none';
+  try {
+    const data = await PB.api('POST', '/api/auth/login', {
+      account: document.getElementById('account').value.trim(),
+      password: document.getElementById('password').value,
+    });
+    PB.setToken(data.token || '');
+    const next = new URLSearchParams(location.search).get('next');
+    const home = {user:'/user.html',manager:'/manager.html',reception:'/reception.html',server:'/service.html',cs:'/cs.html'}[data.role] || '/login.html';
+    location.href = next || home;
+  } catch (ex) {
+    err.textContent = '登录失败：' + ex.message;
+    err.style.display = 'inline-block';
+  }
+};
+</script>
+</body>
+</html>

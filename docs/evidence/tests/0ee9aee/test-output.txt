@@ -1,0 +1,13 @@
+?   	paw-book/cmd/audit	[no test files]
+?   	paw-book/cmd/migrate	[no test files]
+?   	paw-book/cmd/paychannel	[no test files]
+?   	paw-book/cmd/server	[no test files]
+ok  	paw-book/internal/api	6.396s
+?   	paw-book/internal/config	[no test files]
+ok  	paw-book/internal/domain	0.879s
+ok  	paw-book/internal/paychannel	1.232s
+ok  	paw-book/internal/payclient	4.202s
+ok  	paw-book/internal/repo	3.260s
+ok  	paw-book/internal/service	18.255s
+?   	paw-book/internal/store	[no test files]
+?   	paw-book/migrations	[no test files]

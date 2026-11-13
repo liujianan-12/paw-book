@@ -1,0 +1,10 @@
+并发用例轮次口径说明（对应 AGENTS.md §4 门禁 3「并发用例可重复运行（≥10 轮）且结果唯一」）
+
+1. 核销 vs 取消审核并发：internal/service/t02_agent_verify_test.go
+   TestT02R61_CheckInVsCancelConcurrentSingleWinner —— 字面满足：外层 10 轮循环，
+   每轮并发核销/取消后断言终态唯一合法、无双重副作用。
+2. 并发抢位：internal/service/reservation_test.go —— 50 个 goroutine 并发抢容量 3 的时段，
+   断言恰好 3 个成功、其余名额已满，且在 go test -race 下通过（相当于对同一竞争路径的
+   高强度单轮替代口径）；名额守恒由 scenarios.ps1 服务端实测再次覆盖（两用户并发抢容量 1，
+   恰好 1 个成功，见 scenarios-output.txt S2 段）。
+3. -race 全量：go test -race ./... 全部 ok（race-final.txt），环境见 race-env-final.txt。

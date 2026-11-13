@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>店长 · 日清</title><link rel="stylesheet" href="/app.css"></head>
+<body>
+<header><h1>店长工作台</h1><span class="who" data-who></span><button onclick="PB.logout()">退出登录</button></header>
+<main>
+  <div class="grid2">
+    <section class="card">
+      <h2>发布时段</h2>
+      <div class="row"><label>开始</label><input id="start" type="datetime-local"></div>
+      <div class="row" style="margin-top:8px"><label>结束</label><input id="end" type="datetime-local"></div>
+      <div class="row" style="margin-top:10px"><button class="primary" id="createSlot">发布（容量 3）</button></div>
+      <p class="muted" id="clock" style="margin:10px 0 0;font-size:12px"></p>
+    </section>
+    <section class="card">
+      <h2>标记未到店 <span class="hint">时段结束后、已确认、必填原因；不退款</span></h2>
+      <div class="row"><label>预约 ID</label><input id="nsRid" type="number" min="1" style="width:120px"></div>
+      <div class="row" style="margin-top:8px"><label>原因</label><input id="nsReason" placeholder="例如：未按时到店" style="flex:1"></div>
+      <div class="row" style="margin-top:10px"><button class="primary" id="noShow">标记未到店</button></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>日清 <span class="hint">金额单位：元；勾稽差额必须为 0</span></h2>
+    <div class="row"><label>日期</label><input id="day" type="date"><button id="refresh">查询</button></div>
+    <div class="stat">
+      <div><span>已收款</span><b id="collected">-</b></div>
+      <div><span>已完成收入</span><b id="income">-</b></div>
+      <div><span>已退款</span><b id="refunded">-</b></div>
+      <div><span>退款待处理</span><b id="refundPending">-</b></div>
+      <div><span>未到店保留</span><b id="noShowHeld">-</b></div>
+      <div><span>履约中占用</span><b id="activeHeld">-</b></div>
+    </div>
+    <p class="row" style="margin:12px 0 0">
+      <span class="badge" id="unaccounted">勾稽差额 -</span>
+      <span class="badge warn" id="refundCount">退款待处理 -</span>
+      <span class="badge bad" id="anomaly">支付异常 -</span>
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>时段明细</h2>
+    <table>
+      <thead><tr><th>时段</th><th>有效</th><th>完成</th><th>取消</th><th>未到店</th><th>退款待处理</th></tr></thead>
+      <tbody id="slots"></tbody>
+    </table>
+    <pre class="msg" id="msg">就绪。</pre>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
+<script>
+const msg = document.getElementById('msg');
+const yuan = c => '¥' + (Number(c || 0) / 100).toFixed(2);
+const fmt = t => t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-';
+const setText = (id, v) => document.getElementById(id).textContent = v;
+
+async function load() {
+  const tb = document.getElementById('slots');
+  try {
+    const q = document.getElementById('day').value ? '?date=' + document.getElementById('day').value : '';
+    const d = await PB.api('GET', '/api/manager/daily-close' + q);
+    setText('collected', yuan(d.CollectedCents));
+    setText('income', yuan(d.CompletedIncomeCents));
+    setText('refunded', yuan(d.RefundedCents));
+    setText('refundPending', yuan(d.RefundPendingCents));
+    setText('noShowHeld', yuan(d.NoShowHeldCents));
+    setText('activeHeld', yuan(d.ActiveHeldCents));
+    const ua = document.getElementById('unaccounted');
+    ua.textContent = '勾稽差额 ' + yuan(d.UnaccountedCents);
+    ua.className = 'badge ' + (d.UnaccountedCents === 0 ? 'ok' : 'bad');
+    setText('refundCount', '退款待处理 ' + d.RefundPendingCount + ' 笔');
+    setText('anomaly', '支付异常 ' + d.PaymentExceptionCount + ' 笔');
+    const list = d.Slots || [];
+    if (!list.length) return PB.empty(tb, 6, d.Day + ' 没有时段');
+    tb.innerHTML = list.map(s => `<tr><td>${fmt(s.StartAt)} ~ ${new Date(s.EndAt).toLocaleTimeString('zh-CN',{hour12:false})}</td>
+      <td>${s.ActiveCount}</td><td>${s.Completed}</td><td>${s.Cancelled}</td><td>${s.NoShow}</td><td>${s.RefundPending}</td></tr>`).join('');
+    msg.textContent = '日清日期 ' + d.Day;
+  } catch (e) { PB.empty(tb, 6, '日清加载失败：' + e.message); }
+}
+
+async function createSlot() {
+  const s = document.getElementById('start').value, e = document.getElementById('end').value;
+  if (!s || !e) return PB.toast('请选择起止时间', true);
+  try {
+    const d = await PB.api('POST', '/api/manager/slots', {startAt: new Date(s).toISOString(), endAt: new Date(e).toISOString(), capacity: 3});
+    msg.textContent = '已发布时段 #' + d.slotId;
+    PB.toast('时段已发布');
+    load();
+  } catch (ex) { msg.textContent = '发布失败：' + ex.message; PB.toast('发布失败：' + ex.message, true); }
+}
+
+async function noShow() {
+  const id = document.getElementById('nsRid').value, reason = document.getElementById('nsReason').value.trim();
+  if (!id || !reason) return PB.toast('预约 ID 与原因必填', true);
+  try {
+    await PB.api('POST', '/api/manager/reservations/' + id + '/no-show', {reason});
+    msg.textContent = '预约 #' + id + ' 已标记未到店（不退款，名额已释放）';
+    PB.toast('已标记未到店');
+    load();
+  } catch (ex) { msg.textContent = '标记失败：' + ex.message; PB.toast('标记失败：' + ex.message, true); }
+}
+
+document.getElementById('refresh').onclick = load;
+document.getElementById('createSlot').onclick = createSlot;
+document.getElementById('noShow').onclick = noShow;
+function toInput(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+PB.requireLogin('manager').then(s => {
+  if (!s) return;
+  const now = new Date(s.ServerNow);
+  document.getElementById('clock').textContent = '服务器当前时间：' + now.toLocaleString('zh-CN', {hour12: false})
+    + '（时段必须晚于该时刻；输入框按浏览器本地时区提交）';
+  const st = new Date(now.getTime() + 3 * 3600e3), en = new Date(now.getTime() + 4 * 3600e3);
+  document.getElementById('start').value = toInput(st);
+  document.getElementById('end').value = toInput(en);
+  load();
+});
+</script>
+</body></html>

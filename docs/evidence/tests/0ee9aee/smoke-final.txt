@@ -1,0 +1,1 @@
+﻿PASS 冒烟：slot=1 reservation=1 payment=1 收入=9900 差额=0 种子=1/4/1

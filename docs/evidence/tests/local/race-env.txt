@@ -1,0 +1,6 @@
+﻿== go version ==
+go version go1.26.0 windows/amd64
+== gcc ==
+== CGO_ENABLED ==
+0
+BLOCKED: gcc/MinGW 未安装，-race 无法执行（E1）

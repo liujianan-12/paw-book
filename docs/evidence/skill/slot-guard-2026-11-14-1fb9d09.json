@@ -1,0 +1,84 @@
+{
+  "skill": "slot-rule-guard",
+  "version": "0.1.0",
+  "ts": "2026-11-12T13:55:36+08:00",
+  "date": "2026-11-14",
+  "storeId": 1,
+  "commit": "1fb9d09",
+  "checks": [
+    {
+      "id": "I1",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I3",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I9",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "R3.1",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "R3.2",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "R3.3/R5.1",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I5/I8",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I10",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I8",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I13",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I14",
+      "pass": true,
+      "rows": 0
+    },
+    {
+      "id": "I6/I7",
+      "pass": true,
+      "rows": 0
+    }
+  ],
+  "pass": true,
+  "commands": [
+    "go run ./cmd/audit -db C:\\Users\\ndkdl\\AppData\\Local\\Temp\\paw-preview.db -date 2026-11-14 -store 1"
+  ]
+}

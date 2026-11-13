@@ -1,0 +1,69 @@
+﻿[001] 服务启动 PASS addr=http://127.0.0.1:18290 db=C:\Users\ndkdl\AppData\Local\Temp\paw-scen-3d83421b94904cef9e03d6729147688b.db clock=2026-11-14T00:00:00Z
+[002] 六账号登录 PASS（u1/u2 宠物主人，mgr/rec/srv/cs1 员工）
+[003] S1 开始：店长发布时段（09:00-10:00Z，容量3）
+[004] S1 时段创建 slotId=1
+[005] S1 u1 为宠物1 预约 reservationId=1 status=PENDING_PAYMENT
+[006] S1 创建支付单 orderNo=P1-1794614400000000000
+[007] S1 支付回调验签 CONFIRMED PASS
+[008] S1 重复支付回调 result=DUPLICATE_IGNORED duplicate=（不得重复确认）
+[009] S1 前台核销 PASS alreadyDone=False
+[010] S1 服务开始 PASS
+[011] S1 服务完成 PASS alreadyDone=False
+[012] S1 重复完成 alreadyDone=true PASS（不重复记收入）
+[013] S1 用户查询预约状态=COMPLETED 金额=9900 PASS
+[014] S1 店长日清：已完成收入=9900 差额=0 PASS
+[015] S1 正常接待 全链路 PASS
+[016] S2 开始：并发抢位（容量1，u1/pet1 与 u2/pet3 同时预约）
+[017] S2 并发结果 A={"ok":true,"code":0,"rid":2,"msg":"ok","acc":"u1"}
+[018] S2 并发结果 B={"ok":false,"code":"SLOT_FULL","msg":"该时段名额已满（1/1）"}
+[019] S2 并发抢位唯一成功 PASS（名额守恒）
+[020] S2 抢位者 reservationId=2 支付确认 PASS
+[021] S2 名额释放：slotB2 容量1，u1/pet1 预约后未付款取消，名额恢复
+[022] S2 未付款取消释放名额 PASS status=CANCELLED
+[023] S2 新用户预约并确认 PASS reservationId=4 status=CONFIRMED
+[024] S2 名额循环 全链路 PASS
+[025] S3 开始：提前≥2h 取消自动受理（4h 场次）
+[026] S3 提前取消 AUTO_ACCEPTED + 退款成功 refundNo=R5-1794614400000000000 PASS
+[027] S3 边界：开始前恰好 2h 取消（含 2h，应自动受理）
+[028] S3 2h 分界自动受理 PASS
+[029] S3 临近开始（1h）：无原因取消应被拒
+[030] S3 无原因取消 422 PASS {"code":"CANCEL_REASON_REQUIRED","message":"距开始不足 2h0m0s，取消须填写原因由客服审核"}
+[031] S3 提交审核 cancelRequestId=1 status=CANCELLATION_REVIEW；待审核销 409 PASS
+[032] S3 客服批准 PASS；重复批准 409 PASS
+[033] S3 退款回调失败 refundNo=R7-1794614400000000000（已取消预约不恢复可用）
+[034] S3 退款失败进入待跟进列表（[{"ID":2,"RefundNo":"R6-1794614400000000000","ReservationID":6,"AmountCents":9900,"Reason":"AUTO_CANCEL","Status":"PENDING","RetryCount":0,"LastError":"","PetName":"豆豆","SlotStart":"2026-11-14T02:00:00Z"},{"ID":3,"RefundNo":"R7-1794614400000000000","ReservationID":7,"AmountCents":9900,"Reason":"CS_APPROVED","Status":"FAILED","RetryCount":0,"LastError":"CHANNEL_TIMEOUT","PetName":"乐乐","SlotStart":"2026-11-14T01:00:00Z"}]）
+[035] S3 客服重试退款 + 成功回调 PASS
+[036] S3 用户可见最终状态=CANCELLED 退款进度见 detail JSON：{"ID":7,"StoreID":1,"SlotID":6,"UserID":2,"PetID":3,"ItemID":1,"Status":"CANCELLED","PriceCents":9900,"PayExpireAt":"2026-11-14T00:05:00Z","PaidAt":null,"CheckedInAt":null,"StartedAt":null,"CompletedAt":null,"NoShowAt":null,"NoShowReason":"","CancelledAt":null,"CancelType":"CS_APPROVED","SeatReleased":true,"CreatedAt":"2026-11-14T00:00:00Z","UpdatedAt":"2026-11-14T00:00:00Z","PetName":"乐乐","UserName":"李四","SlotStart":"2026-11-14T01:00:00Z","SlotEnd":"2026-11-14T02:00:00Z","CancelReqID":1,"CancelReqStat":"APPROVED","CancelReason":"??????","RefundID":3,"RefundStatus":"SUCCESS","RefundRetry":1,"RefundError":""}
+[037] S3 审核拒绝分支：拒绝后恢复已确认，可再次提交
+[038] S3 客服拒绝恢复 CONFIRMED PASS
+[039] S3 拒绝后再次提交 PASS cancelRequestId=3
+[040] S3 再次审核批准并退款成功 PASS
+[041] S3 取消分支 全链路 PASS
+[042] S4 开始：取消与核销并发（slotG 容量1）
+[043] S4 并发结果 cancel={"ok":true,"op":"cancel","status":"AUTO_ACCEPTED"}
+[044] S4 并发结果 checkin={"ok":false,"op":"checkin","code":"CHECKIN_NOT_ALLOWED","msg":"仅已确认预约可核销（当前 CANCELLED）"}
+[045] S4 并发后预约唯一状态=CANCELLED
+[046] S4 取消与核销并发得到唯一合法结果 PASS
+[047] S4 重复核销与越权（slotH）
+[048] S4 重复核销 alreadyDone=true PASS（不重复记收入）
+[049] S4 slotH 服务开始并完成（完成收入只记一次，日清合计核验）
+[050] S4 越权防护 PASS（u2 查他人预约 404；未登录 401；用户调店长接口 403；跨店校验见单元测试 internal/service）
+[051] S4 门店现场冲突 全链路 PASS
+[052] S5 预置未到店素材：slotNS（01:00-02:00Z），u1/pet1 预约并付款确认
+[053] S5 未到店素材确认 reservationId=11 status=CONFIRMED
+[054] S5 停止服务并重启（同一数据库，教学时钟前移到 12:00Z）——验证落库与重启可查询
+[055] S5 重启完成，healthz/readyz PASS
+[056] S5 重启后重新登录 PASS（会话不跨进程持久，业务数据落库保留）
+[057] S5 重启后 u1 预约记录 9 条：:CONFIRMED, :COMPLETED, :CANCELLED, :CANCELLED, :CANCELLED, :CANCELLED, :CANCELLED, :CONFIRMED, :COMPLETED
+[058] S5 时段已开始不可预约 PASS（{"code":"SLOT_STARTED","message":"时段已开始，不可预约"}）
+[059] S5 店长标记未到店 PASS（不自动退款）
+[060] S5 用户查看未到店结果 status=NO_SHOW PASS
+[061] S5 店长日清核查（2026-11-14）：{"StoreID":1,"Day":"2026-11-14","Slots":[{"SlotID":6,"StartAt":"2026-11-14T01:00:00Z","EndAt":"2026-11-14T02:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":7,"StartAt":"2026-11-14T01:00:00Z","EndAt":"2026-11-14T02:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":10,"StartAt":"2026-11-14T01:00:00Z","EndAt":"2026-11-14T02:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":0,"NoShow":1,"RefundPending":0,"Reservations":""},{"SlotID":5,"StartAt":"2026-11-14T02:00:00Z","EndAt":"2026-11-14T03:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":1,"Reservations":""},{"SlotID":8,"StartAt":"2026-11-14T03:00:00Z","EndAt":"2026-11-14T04:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":1,"Reservations":""},{"SlotID":9,"StartAt":"2026-11-14T03:00:00Z","EndAt":"2026-11-14T04:00:00Z","ActiveCount":1,"Completed":1,"Cancelled":0,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":4,"StartAt":"2026-11-14T04:00:00Z","EndAt":"2026-11-14T05:00:00Z","ActiveCount":0,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":1,"StartAt":"2026-11-14T09:00:00Z","EndAt":"2026-11-14T10:00:00Z","ActiveCount":1,"Completed":1,"Cancelled":0,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":2,"StartAt":"2026-11-14T11:00:00Z","EndAt":"2026-11-14T12:00:00Z","ActiveCount":1,"Completed":0,"Cancelled":0,"NoShow":0,"RefundPending":0,"Reservations":""},{"SlotID":3,"StartAt":"2026-11-14T13:00:00Z","EndAt":"2026-11-14T14:00:00Z","ActiveCount":1,"Completed":0,"Cancelled":1,"NoShow":0,"RefundPending":0,"Reservations":" "}],"CollectedCents":99000,"CompletedIncomeCents":19800,"RefundedCents":29700,"RefundPendingCents":19800,"NoShowHeldCents":9900,"ActiveHeldCents":19800,"UnaccountedCents":0,"RefundPendingCount":2,"PaymentExceptionCount":0}
+[062] S5 收店核查：已完成/取消退款/未到店/退款待处理记录均可在日清与列表中分别核查，差额=0 PASS
+[063] 全部五组场景 PASS
+== SUMMARY ==
+S1 正常接待: PASS
+S2 名额循环: PASS（并发唯一成功 + 取消释放 + 新用户预约）
+S3 取消分支: PASS（自动受理/2h分界/审核批准/拒绝恢复/拒绝后重提/退款失败重试）
+S4 门店现场冲突: PASS（取消核销并发唯一结果/重复核销幂等/越权防护）
+S5 收店核查: PASS（重启持久化/已开始不可约/未到店/日清勾稽差额0）

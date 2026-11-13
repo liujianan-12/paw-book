@@ -1,0 +1,71 @@
+/* 低饱和中性配色：以灰阶为主，状态只用极淡的灰绿/灰棕/灰蓝区分，不使用高亮红紫。 */
+:root{
+  --bg:#f6f7f8;
+  --card:#fff;
+  --ink:#24272c;
+  --muted:#767d87;
+  --line:#e4e6ea;
+  --line-strong:#d5d8dd;
+  --accent:#3f4855;
+  --accent-hover:#2f3742;
+  --ok:#5c7a6a;
+  --warn:#8a7550;
+  --bad:#8a6060;
+  --info:#5f6f86;
+  --chip:#f2f3f5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:13px 24px;display:flex;align-items:center;gap:14px}
+header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+header .who{margin-left:auto;color:var(--muted);font-size:12px}
+main{max-width:1080px;margin:20px auto;padding:0 20px 44px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.card h2{font-size:14px;margin:0 0 12px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card h2 .hint{font-weight:400;color:var(--muted);font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+th{color:var(--muted);font-weight:500;background:#fafafb;font-size:12px}
+tbody tr:hover{background:#fafafb}
+tbody tr:last-child td{border-bottom:none}
+.empty{color:var(--muted);text-align:center;padding:20px 0;font-size:13px}
+button{font:inherit;border:1px solid var(--line-strong);background:var(--card);color:var(--ink);
+  border-radius:5px;padding:5px 12px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
+button.danger:hover{border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select{font:inherit;padding:6px 9px;border:1px solid var(--line-strong);border-radius:5px;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:2px solid #cfd3d9;outline-offset:1px}
+label{color:var(--muted);font-size:12px;margin-right:8px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:3px;font-size:12px;background:var(--chip);color:#5b626c;white-space:nowrap}
+.badge::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px;opacity:.55}
+.badge.ok{background:#f1f4f1;color:var(--ok)}
+.badge.warn{background:#f6f3ec;color:var(--warn)}
+.badge.bad{background:#f6f0f0;color:var(--bad)}
+.badge.info{background:#f0f2f5;color:var(--info)}
+.money{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line-strong)}
+a:hover{border-bottom-color:var(--accent)}
+pre.msg{background:#fafafb;border:1px solid var(--line);border-radius:6px;padding:10px 12px;
+  white-space:pre-wrap;font-size:12px;color:#4a505a;max-height:150px;overflow:auto}
+#toast{position:fixed;right:24px;bottom:24px;display:grid;gap:8px;z-index:9}
+#toast div{background:#2c3037;color:#f2f3f5;padding:9px 14px;border-radius:6px;font-size:13px;
+  box-shadow:0 6px 18px rgba(20,22,26,.14);max-width:380px}
+#toast div.err{background:#5d4343}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat>div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#fcfcfd}
+.stat b{display:block;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.stat span{color:var(--muted);font-size:12px}
+.login{max-width:380px;margin:64px auto;padding:0 18px}
+.login .card{padding:26px 24px}
+.login h1{font-size:17px;margin:0 0 6px;font-weight:600}
+.login p{margin:0}
+.login input{width:100%;margin:4px 0 12px}
+.login button{width:100%;padding:9px;margin-top:2px}

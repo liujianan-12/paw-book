@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>服务 · 履约</title><link rel="stylesheet" href="/app.css"></head>
+<body>
+<header><h1>服务履约</h1><span class="who" data-who></span><button onclick="PB.logout()">退出登录</button></header>
+<main>
+  <section class="card">
+    <h2>开始 / 完成服务 <span class="hint">必须先由前台核销到店；完成即确认收入</span></h2>
+    <div class="row">
+      <label for="rid">预约 ID</label>
+      <input id="rid" type="number" min="1" style="width:160px">
+      <button id="query">查看</button>
+      <button id="start" class="primary">开始服务</button>
+      <button id="done">完成服务</button>
+    </div>
+    <pre class="msg" id="msg">等待操作。</pre>
+  </section>
+  <section class="card">
+    <h2>预约信息</h2>
+    <table>
+      <thead><tr><th>ID</th><th>宠物</th><th>时段</th><th>状态</th><th>到店</th><th>开始</th><th>完成</th></tr></thead>
+      <tbody id="detail"><tr><td class="empty" colspan="7">输入预约 ID 后查看</td></tr></tbody>
+    </table>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
+<script>
+const msg = document.getElementById('msg');
+const rid = () => Number(document.getElementById('rid').value);
+const fmt = t => t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-';
+
+async function query() {
+  const tb = document.getElementById('detail');
+  if (!rid()) return PB.toast('请输入预约 ID', true);
+  try {
+    const d = await PB.api('GET', '/api/reservations/' + rid());
+    tb.innerHTML = `<tr><td>#${d.ID}</td><td>${PB.esc(d.PetName)}</td><td>${fmt(d.SlotStart)}</td>
+      <td>${PB.badge(d.Status)}</td><td>${fmt(d.CheckedInAt)}</td><td>${fmt(d.StartedAt)}</td><td>${fmt(d.CompletedAt)}</td></tr>`;
+    msg.textContent = '预约 ' + d.ID + ' 当前状态：' + d.Status;
+  } catch (e) { PB.empty(tb, 7, '加载失败：' + e.message); }
+}
+async function act(kind) {
+  if (!rid()) return PB.toast('请输入预约 ID', true);
+  try {
+    const d = await PB.api('POST', '/api/service/reservations/' + rid() + '/' + kind);
+    msg.textContent = kind === 'start'
+      ? (d.alreadyDone ? '服务已开始（幂等）' : '已开始：' + fmt(d.startedAt))
+      : (d.alreadyDone ? '服务已完成（幂等，不重复记收入）' : '已完成：' + fmt(d.completedAt));
+    PB.toast(kind === 'start' ? '已开始服务' : '已完成服务');
+    query();
+  } catch (e) { msg.textContent = '操作被拒绝：' + e.message; PB.toast('操作被拒绝：' + e.message, true); }
+}
+document.getElementById('query').onclick = query;
+document.getElementById('start').onclick = () => act('start');
+document.getElementById('done').onclick = () => act('complete');
+PB.requireLogin('server').then(s => { if (s) query(); });
+</script>
+</body></html>

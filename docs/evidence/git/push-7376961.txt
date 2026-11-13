@@ -1,0 +1,10 @@
+﻿push evidence 2026-11-12T16:55:47.6043459+08:00
+remote: https://gitee.com/liujianan12/pet-spa.git
+branch: dev/02-pet-booking
+commit: 7376961
+=== git ls-remote origin dev/02-pet-booking ===
+7376961bbcebc60659c9bb3c87eb7a0a826f706f	refs/heads/dev/02-pet-booking
+=== git log --oneline -3 ===
+7376961 [docs] [v0.1.0] 初始化题目02项目约束与需求文档
+9680d2c [test] [v0.1.2] #1001 T02-T11 三轮复测：D-T02-01/02/03/04 全部关闭
+9a641c8 [fix] [v0.1.2] #1001 幂等指纹纳入路由(D-T02-04)、冒烟改用独立二进制并彻底清理子进程/端口(D-T02-02)

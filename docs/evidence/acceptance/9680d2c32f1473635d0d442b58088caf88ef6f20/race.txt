@@ -1,0 +1,7 @@
+﻿go : go: -race requires cgo; enable cgo by setting CGO_ENABLED=1
+所在位置 C:\Users\ndkdl\AppData\Local\Temp\genie-ps-1794470606374-sgvlyy.ps1:954 字符: 660
++ ... Append -Encoding utf8 $log; go test -race ./... -count=1 2>&1 | Out-F ...
++                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (go: -race requi...g CGO_ENABLED=1:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

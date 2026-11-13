@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>客服 · 审核与退款</title><link rel="stylesheet" href="/app.css"></head>
+<body>
+<header><h1>客服工作台</h1><span class="who" data-who></span><button onclick="PB.logout()">退出登录</button></header>
+<main>
+  <section class="card">
+    <h2>待审取消申请 <span class="hint">批准后取消并退款；拒绝则恢复已确认、名额不变</span></h2>
+    <table>
+      <thead><tr><th>申请</th><th>预约</th><th>宠物</th><th>时段</th><th>原因</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody id="reqs"></tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>退款单 <span class="hint">退款失败不影响预约状态，可重试</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="refresh">刷新</button>
+      <label><input type="checkbox" id="onlyUnfinished" checked> 只看未完成</label>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>预约</th><th>宠物</th><th>金额</th><th>状态</th><th>重试</th><th>失败原因</th><th>操作</th></tr></thead>
+      <tbody id="refs"></tbody>
+    </table>
+    <pre class="msg" id="msg">就绪。</pre>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
+<script>
+const msg = document.getElementById('msg');
+const fmt = t => t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-';
+
+async function loadReqs() {
+  const tb = document.getElementById('reqs');
+  try {
+    const list = await PB.api('GET', '/api/cs/cancel-requests?status=PENDING');
+    if (!list.length) return PB.empty(tb, 7, '暂无待审申请');
+    tb.innerHTML = list.map(q => `
+      <tr><td>#${q.ID}</td><td>#${q.ReservationID}</td><td>${PB.esc(q.PetName)}</td>
+      <td>${fmt(q.SlotStart)}</td><td>${PB.esc(q.Reason)}</td><td>${PB.badge(q.Status)}</td>
+      <td><button class="primary" data-ok="${q.ID}">批准</button>
+          <button class="danger" data-no="${q.ID}">拒绝</button></td></tr>`).join('');
+    tb.querySelectorAll('button[data-ok]').forEach(b => b.onclick = () => review(Number(b.dataset.ok), true));
+    tb.querySelectorAll('button[data-no]').forEach(b => b.onclick = () => review(Number(b.dataset.no), false));
+  } catch (e) { PB.empty(tb, 7, '加载失败：' + e.message); }
+}
+
+async function review(id, approve) {
+  const note = prompt(approve ? '批准说明（可空）' : '拒绝原因（必填）', approve ? '客服同意取消' : '已排班，无法取消');
+  if (note === null) return;
+  if (!approve && !note.trim()) return PB.toast('拒绝必须填写原因', true);
+  try {
+    await PB.api('POST', '/api/cs/cancel-requests/' + id + '/' + (approve ? 'approve' : 'reject'), {note});
+    msg.textContent = '申请 #' + id + (approve ? ' 已批准并创建退款' : ' 已拒绝，预约恢复已确认');
+    PB.toast(approve ? '已批准' : '已拒绝');
+    loadReqs(); loadRefs();
+  } catch (e) { msg.textContent = '处理失败：' + e.message; PB.toast('处理失败：' + e.message, true); }
+}
+
+async function loadRefs() {
+  const tb = document.getElementById('refs');
+  const q = document.getElementById('onlyUnfinished').checked ? '?status=UNFINISHED' : '';
+  try {
+    const list = await PB.api('GET', '/api/cs/refunds' + q);
+    if (!list.length) return PB.empty(tb, 8, '暂无退款单');
+    tb.innerHTML = list.map(f => `
+      <tr><td>#${f.ID}</td><td>#${f.ReservationID}</td><td>${PB.esc(f.PetName)}</td>
+      <td>${PB.money(f.AmountCents)}</td><td>${PB.badge(f.Status)}</td><td>${f.RetryCount}</td>
+      <td class="muted">${PB.esc(f.LastError || '-')}</td>
+      <td>${['FAILED','PENDING'].includes(f.Status) ? '<button class="primary" data-retry="' + f.ID + '">重试</button>' : ''}</td></tr>`).join('');
+    tb.querySelectorAll('button[data-retry]').forEach(b => b.onclick = () => retry(Number(b.dataset.retry)));
+  } catch (e) { PB.empty(tb, 8, '加载失败：' + e.message); }
+}
+
+async function retry(id) {
+  try {
+    const d = await PB.api('POST', '/api/cs/refunds/' + id + '/retry');
+    msg.textContent = '退款 #' + id + ' 已提交重试，退款单号 ' + d.refundNo + '，状态 ' + d.status;
+    PB.toast('已提交重试');
+    loadRefs();
+  } catch (e) { msg.textContent = '重试失败：' + e.message; PB.toast('重试失败：' + e.message, true); }
+}
+document.getElementById('refresh').onclick = () => { loadReqs(); loadRefs(); };
+document.getElementById('onlyUnfinished').onchange = loadRefs;
+PB.requireLogin('cs').then(s => { if (s) { loadReqs(); loadRefs(); } });
+</script>
+</body></html>

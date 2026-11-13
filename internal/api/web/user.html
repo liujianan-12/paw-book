@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>宠物主人 · 预约</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <h1>我的预约</h1>
+  <span class="who" data-who></span>
+  <button onclick="PB.logout()">退出登录</button>
+</header>
+<main>
+  <section class="card">
+    <h2>可约时段 <span class="hint">每时段容量 3 人，预约后 5 分钟内完成支付</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <label for="pet">宠物</label>
+      <select id="pet"><option value="1">豆豆（金毛）</option><option value="2">咪咪（布偶）</option></select>
+      <button id="refresh">刷新</button>
+    </div>
+    <table>
+      <thead><tr><th>时段</th><th>开始</th><th>结束</th><th>价格</th><th>剩余</th><th>操作</th></tr></thead>
+      <tbody id="slots"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>我的预约</h2>
+    <table>
+      <thead><tr><th>ID</th><th>宠物</th><th>时段</th><th>状态</th><th>金额</th><th>退款</th><th>操作</th></tr></thead>
+      <tbody id="mine"></tbody>
+    </table>
+    <pre class="msg" id="msg">选择时段后点击“预约”。</pre>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="/app.js"></script>
+<script>
+const msg = document.getElementById('msg');
+const say = (s) => { msg.textContent = s; };
+
+function fmt(t) { return t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-'; }
+
+async function loadSlots() {
+  const tb = document.getElementById('slots');
+  try {
+    const list = await PB.api('GET', '/api/slots');
+    if (!list.length) return PB.empty(tb, 6, '暂无未来时段，请等待店长发布');
+    tb.innerHTML = list.map(s => `
+      <tr>
+        <td>#${s.ID}</td><td>${fmt(s.StartAt)}</td><td>${fmt(s.EndAt)}</td>
+        <td>${PB.money(9900)}</td>
+        <td>${s.Remaining > 0 ? '<span class="badge ok">余 ' + s.Remaining + '</span>' : '<span class="badge bad">已满</span>'}</td>
+        <td><button class="primary" data-slot="${s.ID}" ${s.Remaining > 0 ? '' : 'disabled'}>预约</button></td>
+      </tr>`).join('');
+    tb.querySelectorAll('button[data-slot]').forEach(b => b.onclick = () => reserve(Number(b.dataset.slot)));
+  } catch (e) { PB.empty(tb, 6, '加载失败：' + e.message); }
+}
+
+async function reserve(slotId) {
+  try {
+    const r = await PB.api('POST', '/api/reservations', {slotId, petId: Number(document.getElementById('pet').value)});
+    say('预约成功 #' + r.reservationId + '，请在 ' + fmt(r.payExpireAt) + ' 前完成支付（' + (r.priceCents/100).toFixed(2) + ' 元）');
+    PB.toast('预约已创建，待支付');
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('预约失败：' + e.message); PB.toast('预约失败：' + e.message, true); }
+}
+
+async function pay(id) {
+  try {
+    const p = await PB.api('POST', '/api/reservations/' + id + '/pay');
+    say('支付单 ' + p.orderNo + '（第 ' + p.attempt + ' 次尝试）');
+    try {
+      const n = await PB.api('POST', '/api/mock/pay', {orderNo: p.orderNo});
+      say('模拟渠道支付成功：' + n.result);
+      PB.toast('支付成功');
+    } catch (e) {
+      say('支付单已创建：' + p.orderNo + '\n模拟渠道未启用（PAW_ENABLE_MOCK_PAY=1），请通过渠道回调完成支付。');
+    }
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('支付失败：' + e.message); PB.toast('支付失败：' + e.message, true); }
+}
+
+async function cancel(id) {
+  const reason = prompt('取消原因（距开始不足 2 小时时必填）', '临时有事');
+  if (reason === null) return;
+  try {
+    const r = await PB.api('POST', '/api/reservations/' + id + '/cancel', {reason});
+    if (r.status === 'AUTO_ACCEPTED') {
+      say('已自动受理，退款单 #' + r.refundId + ' 处理中');
+    } else if (r.status === 'CANCELLED') {
+      say('未付款预约已取消，名额已释放');
+    } else {
+      say('已提交客服审核（申请 #' + r.cancelRequestId + '），名额保留');
+    }
+    await Promise.all([loadSlots(), loadMine()]);
+  } catch (e) { say('取消失败：' + e.message); PB.toast('取消失败：' + e.message, true); }
+}
+
+async function loadMine() {
+  const tb = document.getElementById('mine');
+  try {
+    const list = await PB.api('GET', '/api/my/reservations');
+    if (!list.length) return PB.empty(tb, 7, '还没有预约');
+    tb.innerHTML = list.map(r => `
+      <tr>
+        <td>#${r.ID}</td><td>${PB.esc(r.PetName)}</td><td>${fmt(r.SlotStart)}</td>
+        <td>${PB.badge(r.Status)}</td><td>${PB.money(r.PriceCents)}</td>
+        <td>${r.RefundStatus ? PB.badge(r.RefundStatus) : '<span class="muted">-</span>'}</td>
+        <td>
+          ${r.Status === 'PENDING_PAYMENT' ? '<button class="primary" data-pay="' + r.ID + '">去支付</button>' : ''}
+          ${['PENDING_PAYMENT','CONFIRMED'].includes(r.Status) ? '<button class="danger" data-cancel="' + r.ID + '">取消</button>' : ''}
+        </td>
+      </tr>`).join('');
+    tb.querySelectorAll('button[data-pay]').forEach(b => b.onclick = () => pay(Number(b.dataset.pay)));
+    tb.querySelectorAll('button[data-cancel]').forEach(b => b.onclick = () => cancel(Number(b.dataset.cancel)));
+  } catch (e) { PB.empty(tb, 7, '加载失败：' + e.message); }
+}
+
+document.getElementById('refresh').onclick = () => { loadSlots(); loadMine(); };
+PB.requireLogin('user').then(s => { if (s) { loadSlots(); loadMine(); } });
+</script>
+</body>
+</html>
